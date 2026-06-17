@@ -1,0 +1,17 @@
+{
+  "name": "weather-site-automation",
+  "version": "0.1.0",
+  "description": "天气预报网站自动化项目",
+  "type": "module",
+  "scripts": {
+    "update": "node src/update.js",
+    "check": "node src/checkSite.js",
+    "build": "node src/generatePage.js"
+  },
+  "keywords": [
+    "weather",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT"
+}
