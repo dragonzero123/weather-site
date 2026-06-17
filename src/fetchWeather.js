@@ -1,5 +1,34 @@
 import { readFile } from "node:fs/promises";
 
+const OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
+const DEFAULT_CITY = "上海";
+const DEFAULT_LATITUDE = "31.2304";
+const DEFAULT_LONGITUDE = "121.4737";
+
+const WEATHER_CODE_TEXT = new Map([
+  [0, "晴"],
+  [1, "大部晴朗"],
+  [2, "局部多云"],
+  [3, "阴"],
+  [45, "雾"],
+  [48, "雾凇"],
+  [51, "小毛毛雨"],
+  [53, "中等毛毛雨"],
+  [55, "大毛毛雨"],
+  [61, "小雨"],
+  [63, "中雨"],
+  [65, "大雨"],
+  [71, "小雪"],
+  [73, "中雪"],
+  [75, "大雪"],
+  [80, "小阵雨"],
+  [81, "中等阵雨"],
+  [82, "强阵雨"],
+  [95, "雷雨"],
+  [96, "雷雨伴小冰雹"],
+  [99, "雷雨伴大冰雹"]
+]);
+
 function parseEnv(content) {
   const env = {};
 
@@ -35,31 +64,59 @@ async function loadLocalEnv() {
   }
 }
 
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function createMockWeather(env) {
+function readConfig(env) {
   return {
-    city: env.WEATHER_CITY || "上海",
-    temperature: 24,
-    condition: "多云",
-    humidity: 68,
-    wind: "东南风 3 级",
-    updatedAt: nowIso(),
-    source: "mock"
+    city: env.WEATHER_CITY || DEFAULT_CITY,
+    latitude: env.WEATHER_LATITUDE || DEFAULT_LATITUDE,
+    longitude: env.WEATHER_LONGITUDE || DEFAULT_LONGITUDE,
+    apiUrl: env.WEATHER_API_URL || OPEN_METEO_FORECAST_URL,
+    apiKey: env.WEATHER_API_KEY || ""
   };
 }
 
-function normalizeApiWeather(data, env) {
+function getWeatherText(code) {
+  return WEATHER_CODE_TEXT.get(Number(code)) || "未知天气";
+}
+
+function formatWind(speed) {
+  if (speed === undefined || speed === null) {
+    return "暂无";
+  }
+
+  return `${speed} km/h`;
+}
+
+function buildOpenMeteoUrl(config) {
+  const url = new URL(config.apiUrl);
+  url.searchParams.set("latitude", config.latitude);
+  url.searchParams.set("longitude", config.longitude);
+  url.searchParams.set("current", "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m");
+  url.searchParams.set("timezone", "auto");
+
+  if (config.apiKey) {
+    url.searchParams.set("apikey", config.apiKey);
+  }
+
+  return url;
+}
+
+function normalizeOpenMeteoWeather(data, config) {
+  const current = data.current || {};
+  const units = data.current_units || {};
+
   return {
-    city: data.city || data.name || env.WEATHER_CITY || "未知城市",
-    temperature: data.temperature ?? data.temp ?? data.main?.temp,
-    condition: data.condition || data.weather?.[0]?.description || data.weatherText || "未知天气",
-    humidity: data.humidity ?? data.main?.humidity ?? null,
-    wind: data.wind || data.windText || data.wind?.speed || "",
-    updatedAt: nowIso(),
-    source: "api"
+    city: config.city,
+    temperature: current.temperature_2m,
+    condition: getWeatherText(current.weather_code),
+    humidity: current.relative_humidity_2m,
+    wind: formatWind(current.wind_speed_10m),
+    updatedAt: current.time || new Date().toISOString(),
+    source: "Open-Meteo API",
+    units: {
+      temperature: units.temperature_2m || "°C",
+      humidity: units.relative_humidity_2m || "%",
+      wind: units.wind_speed_10m || "km/h"
+    }
   };
 }
 
@@ -68,20 +125,8 @@ export async function fetchWeather() {
     ...process.env,
     ...(await loadLocalEnv())
   };
-
-  if (!env.WEATHER_API_URL || env.WEATHER_API_URL.includes("example.com")) {
-    return createMockWeather(env);
-  }
-
-  if (!env.WEATHER_API_KEY) {
-    throw new Error("已配置 WEATHER_API_URL，但缺少 WEATHER_API_KEY。请把真实 Key 放到 .env。");
-  }
-
-  const url = new URL(env.WEATHER_API_URL);
-  url.searchParams.set("key", env.WEATHER_API_KEY);
-  if (env.WEATHER_CITY) {
-    url.searchParams.set("city", env.WEATHER_CITY);
-  }
+  const config = readConfig(env);
+  const url = buildOpenMeteoUrl(config);
 
   const response = await fetch(url);
   if (!response.ok) {
@@ -89,5 +134,5 @@ export async function fetchWeather() {
   }
 
   const data = await response.json();
-  return normalizeApiWeather(data, env);
+  return normalizeOpenMeteoWeather(data, config);
 }

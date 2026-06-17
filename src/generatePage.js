@@ -17,6 +17,7 @@ function escapeHtml(value) {
 function renderPage(weather) {
   const tip = createWeatherText(weather);
   const updatedAt = weather.updatedAt || new Date().toISOString();
+  const temperatureUnit = weather.units?.temperature || "°C";
 
   return `<!doctype html>
 <html lang="zh-CN">
@@ -91,7 +92,7 @@ function renderPage(weather) {
 <body>
   <main>
     <h1>${escapeHtml(weather.city)}天气预报</h1>
-    <p class="temperature">${escapeHtml(weather.temperature)}°C</p>
+    <p class="temperature">${escapeHtml(weather.temperature)}${escapeHtml(temperatureUnit)}</p>
     <dl>
       <dt>城市</dt>
       <dd>${escapeHtml(weather.city)}</dd>

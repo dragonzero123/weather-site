@@ -20,6 +20,10 @@ function createLogEntry(result) {
     `- 检查通过：${result.checkOk ? "是" : "否"}`
   ];
 
+  if (result.source) {
+    lines.push(`- 数据来源：${result.source}`);
+  }
+
   if (result.error) {
     lines.push(`- 失败原因：${result.error}`);
   }
@@ -33,6 +37,7 @@ export async function updateWeatherSite() {
     fetchOk: false,
     pageOk: false,
     checkOk: false,
+    source: "",
     error: ""
   };
 
@@ -40,6 +45,7 @@ export async function updateWeatherSite() {
     await mkdir("data", { recursive: true });
     const weather = await fetchWeather();
     result.fetchOk = true;
+    result.source = weather.source || "";
 
     await writeFile(DATA_FILE, `${JSON.stringify(weather, null, 2)}\n`, "utf8");
     await generatePage(weather);

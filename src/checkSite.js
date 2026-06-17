@@ -19,12 +19,14 @@ export async function checkSite() {
   assertValue(weather.temperature !== undefined && weather.temperature !== null, "weather.json 缺少温度信息");
   assertValue(weather.condition, "weather.json 缺少天气信息");
   assertValue(weather.updatedAt, "weather.json 缺少更新时间");
+  assertValue(weather.source && weather.source !== "mock", "weather.json 的数据来源不能是 mock");
 
   const requiredTexts = [
     String(weather.city),
     String(weather.temperature),
     String(weather.condition),
-    String(weather.updatedAt)
+    String(weather.updatedAt),
+    String(weather.source)
   ];
 
   for (const text of requiredTexts) {
@@ -33,7 +35,7 @@ export async function checkSite() {
 
   return {
     ok: true,
-    message: "检查通过：网页和天气数据正常。"
+    message: "检查通过：网页和真实天气数据正常。"
   };
 }
 

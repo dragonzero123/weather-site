@@ -1,9 +1,14 @@
 {
-  "city": "上海",
-  "temperature": 24,
-  "condition": "多云",
-  "humidity": 68,
-  "wind": "东南风 3 级",
-  "updatedAt": "2026-06-17T18:05:58.579Z",
-  "source": "mock"
+  "city": "广州",
+  "temperature": 25.3,
+  "condition": "阴",
+  "humidity": 97,
+  "wind": "7.4 km/h",
+  "updatedAt": "2026-06-18T03:15",
+  "source": "Open-Meteo API",
+  "units": {
+    "temperature": "°C",
+    "humidity": "%",
+    "wind": "km/h"
+  }
 }
