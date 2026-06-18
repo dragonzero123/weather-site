@@ -1,0 +1,65 @@
+name: Deploy weather site to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+  schedule:
+    - cron: "0 23 * * *"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      WEATHER_CITY: ${{ vars.WEATHER_CITY || '广州' }}
+      WEATHER_LATITUDE: ${{ vars.WEATHER_LATITUDE || '23.1291' }}
+      WEATHER_LONGITUDE: ${{ vars.WEATHER_LONGITUDE || '113.2644' }}
+      WEATHER_API_URL: ${{ vars.WEATHER_API_URL || 'https://api.open-meteo.com/v1/forecast' }}
+      WEATHER_API_KEY: ${{ secrets.WEATHER_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Update weather data
+        run: npm run update
+
+      - name: Check generated site
+        run: npm run check
+
+      - name: Build site
+        run: npm run build
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload public folder
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

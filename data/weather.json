@@ -1,10 +1,10 @@
 {
   "city": "广州",
-  "temperature": 25.3,
-  "condition": "阴",
-  "humidity": 97,
-  "wind": "7.4 km/h",
-  "updatedAt": "2026-06-18T03:15",
+  "temperature": 28.7,
+  "condition": "雷雨",
+  "humidity": 83,
+  "wind": "10.7 km/h",
+  "updatedAt": "2026-06-18T16:15",
   "source": "Open-Meteo API",
   "units": {
     "temperature": "°C",
