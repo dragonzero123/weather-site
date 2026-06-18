@@ -38,12 +38,15 @@ WEATHER_LATITUDE=23.1291
 WEATHER_LONGITUDE=113.2644
 WEATHER_API_URL=https://api.open-meteo.com/v1/forecast
 WEATHER_API_KEY=
+WECOM_WEBHOOK_URL=
+SITE_URL=https://dragonzero123.github.io/weather-site/
 ```
 
 注意：
 
 - 默认使用 Open-Meteo 真实天气 API，不需要 API Key。
 - 如果以后换成需要 Key 的服务，真实 API Key 只能写在 `.env` 文件中。
+- 企业微信群机器人 Webhook 只能写在 `.env` 或 GitHub Secrets 中。
 - `.env` 不要提交到公开仓库。
 
 ## GitHub Pages 上线
@@ -61,9 +64,10 @@ npm install
 npm run update
 npm run check
 npm run build
+npm run notify
 ```
 
-然后发布 `public` 文件夹到 GitHub Pages。
+然后发布 `public` 文件夹到 GitHub Pages，并把更新结果发送到企业微信群。
 
 ### GitHub 网页后台设置
 
@@ -79,8 +83,22 @@ npm run build
    - `WEATHER_API_URL`
 7. 如果你以后使用需要 API Key 的天气服务，进入 `Settings` -> `Secrets and variables` -> `Actions` -> `Secrets`，添加：
    - `WEATHER_API_KEY`
+8. 如果要发送到企业微信群，进入 `Settings` -> `Secrets and variables` -> `Actions` -> `Secrets`，添加：
+   - `WECOM_WEBHOOK_URL`
+9. 进入 `Settings` -> `Secrets and variables` -> `Actions` -> `Variables`，添加网站地址：
+   - `SITE_URL`
 
 当前 Open-Meteo 不需要 API Key，所以可以不添加 `WEATHER_API_KEY`。
+
+### 企业微信群通知
+
+企业微信里需要先添加“群机器人”，复制机器人 Webhook 地址，然后保存到 GitHub Secrets：
+
+```text
+WECOM_WEBHOOK_URL
+```
+
+不要把真实 Webhook 地址写到代码、README 或公开仓库里。
 
 ## 文件说明
 
@@ -90,6 +108,7 @@ npm run build
 - `src/weatherText.js`：生成天气提醒文案
 - `src/checkSite.js`：检查网页和数据是否正常
 - `src/update.js`：串联完整更新流程
+- `src/sendWeCom.js`：发送企业微信群通知
 - `data/weather.json`：保存最新天气数据
 - `logs/update-log.md`：记录每次更新结果
 - `skills/weather-update/SKILL.md`：后续自动更新 Skill 规则

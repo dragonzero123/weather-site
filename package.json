@@ -6,7 +6,8 @@
   "scripts": {
     "update": "node src/update.js",
     "check": "node src/checkSite.js",
-    "build": "node src/generatePage.js"
+    "build": "node src/generatePage.js",
+    "notify": "node src/sendWeCom.js"
   },
   "keywords": [
     "weather",

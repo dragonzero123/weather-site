@@ -30,6 +30,7 @@ jobs:
       WEATHER_LONGITUDE: ${{ vars.WEATHER_LONGITUDE || '113.2644' }}
       WEATHER_API_URL: ${{ vars.WEATHER_API_URL || 'https://api.open-meteo.com/v1/forecast' }}
       WEATHER_API_KEY: ${{ secrets.WEATHER_API_KEY }}
+      WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -63,3 +64,8 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Send WeCom notification
+        env:
+          SITE_URL: ${{ vars.SITE_URL || steps.deployment.outputs.page_url }}
+        run: npm run notify
