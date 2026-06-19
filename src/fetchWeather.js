@@ -11,7 +11,7 @@ const WEATHER_CODE_TEXT = new Map([
   [2, "局部多云"],
   [3, "阴"],
   [45, "雾"],
-  [48, "雾凇"],
+  [48, "霜雾"],
   [51, "小毛毛雨"],
   [53, "中等毛毛雨"],
   [55, "大毛毛雨"],
@@ -66,7 +66,7 @@ async function loadLocalEnv() {
 
 function readConfig(env) {
   return {
-    city: env.WEATHER_CITY || DEFAULT_CITY,
+    city: normalizeCityName(env.WEATHER_CITY || DEFAULT_CITY),
     latitude: env.WEATHER_LATITUDE || DEFAULT_LATITUDE,
     longitude: env.WEATHER_LONGITUDE || DEFAULT_LONGITUDE,
     apiUrl: env.WEATHER_API_URL || OPEN_METEO_FORECAST_URL,
@@ -74,16 +74,24 @@ function readConfig(env) {
   };
 }
 
+function normalizeCityName(city) {
+  if (city === "广州") {
+    return "广州市";
+  }
+
+  return city;
+}
+
 function getWeatherText(code) {
   return WEATHER_CODE_TEXT.get(Number(code)) || "未知天气";
 }
 
-function formatWind(speed) {
+function formatWind(speed, unit = "km/h") {
   if (speed === undefined || speed === null) {
     return "暂无";
   }
 
-  return `${speed} km/h`;
+  return `${speed} ${unit}`;
 }
 
 function buildOpenMeteoUrl(config) {
@@ -91,6 +99,8 @@ function buildOpenMeteoUrl(config) {
   url.searchParams.set("latitude", config.latitude);
   url.searchParams.set("longitude", config.longitude);
   url.searchParams.set("current", "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m");
+  url.searchParams.set("hourly", "temperature_2m,weather_code,precipitation_probability,wind_speed_10m");
+  url.searchParams.set("forecast_days", "2");
   url.searchParams.set("timezone", "auto");
 
   if (config.apiKey) {
@@ -100,18 +110,45 @@ function buildOpenMeteoUrl(config) {
   return url;
 }
 
-function normalizeOpenMeteoWeather(data, config) {
+function normalizeHourlyForecast(data) {
+  const hourly = data.hourly || {};
+  const units = data.hourly_units || {};
+  const times = hourly.time || [];
+  const currentTime = data.current?.time || times[0] || "";
+  const startIndex = Math.max(0, times.findIndex((time) => time >= currentTime));
+
+  return times.slice(startIndex, startIndex + 24).map((time, index) => {
+    const sourceIndex = startIndex + index;
+    const windSpeed = hourly.wind_speed_10m?.[sourceIndex];
+    const rainChance = hourly.precipitation_probability?.[sourceIndex];
+
+    return {
+      time,
+      condition: getWeatherText(hourly.weather_code?.[sourceIndex]),
+      temperature: hourly.temperature_2m?.[sourceIndex],
+      rainChance,
+      wind: formatWind(windSpeed, units.wind_speed_10m || "km/h")
+    };
+  });
+}
+
+function normalizeOpenMeteoWeather(data, config, fetchedAt) {
   const current = data.current || {};
   const units = data.current_units || {};
 
   return {
     city: config.city,
+    latitude: Number(config.latitude),
+    longitude: Number(config.longitude),
     temperature: current.temperature_2m,
     condition: getWeatherText(current.weather_code),
     humidity: current.relative_humidity_2m,
-    wind: formatWind(current.wind_speed_10m),
-    updatedAt: current.time || new Date().toISOString(),
+    wind: formatWind(current.wind_speed_10m, units.wind_speed_10m || "km/h"),
+    updatedAt: current.time || "",
+    fetchedAt,
     source: "Open-Meteo API",
+    sourceLabel: `默认城市：${config.city}`,
+    forecast24: normalizeHourlyForecast(data),
     units: {
       temperature: units.temperature_2m || "°C",
       humidity: units.relative_humidity_2m || "%",
@@ -134,5 +171,5 @@ export async function fetchWeather() {
   }
 
   const data = await response.json();
-  return normalizeOpenMeteoWeather(data, config);
+  return normalizeOpenMeteoWeather(data, config, new Date().toISOString());
 }

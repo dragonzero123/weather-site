@@ -1,8 +1,10 @@
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const DATA_FILE = "data/weather.json";
 const PAGE_FILE = "public/index.html";
+const APP_FILE = "public/app.js";
+const STYLE_FILE = "public/style.css";
 
 function assertValue(condition, message) {
   if (!condition) {
@@ -15,18 +17,29 @@ export async function checkSite() {
   const pageContent = await readFile(PAGE_FILE, "utf8");
   const weather = JSON.parse(dataContent);
 
+  await access(APP_FILE);
+  await access(STYLE_FILE);
+
   assertValue(weather.city, "weather.json 缺少城市信息");
   assertValue(weather.temperature !== undefined && weather.temperature !== null, "weather.json 缺少温度信息");
   assertValue(weather.condition, "weather.json 缺少天气信息");
-  assertValue(weather.updatedAt, "weather.json 缺少更新时间");
+  assertValue(weather.fetchedAt, "weather.json 缺少天气数据最后成功获取时间 fetchedAt");
   assertValue(weather.source && weather.source !== "mock", "weather.json 的数据来源不能是 mock");
+  assertValue(Array.isArray(weather.forecast24), "weather.json 缺少未来 24 小时趋势 forecast24");
+  assertValue(weather.forecast24.length > 0, "weather.json 的 forecast24 不能为空");
 
   const requiredTexts = [
     String(weather.city),
     String(weather.temperature),
     String(weather.condition),
-    String(weather.updatedAt),
-    String(weather.source)
+    "当前时间",
+    "数据更新时间",
+    "刷新天气",
+    "使用当前位置",
+    "今日天气趋势",
+    "默认城市",
+    "app.js",
+    "style.css"
   ];
 
   for (const text of requiredTexts) {
@@ -35,7 +48,7 @@ export async function checkSite() {
 
   return {
     ok: true,
-    message: "检查通过：网页和真实天气数据正常。"
+    message: "检查通过：网页、真实天气数据、定位入口和今日天气趋势正常。"
   };
 }
 
