@@ -26,7 +26,11 @@ const elements = {
   cityTitle: document.querySelector("#cityTitle"),
   sourceLabel: document.querySelector("#sourceLabel"),
   temperature: document.querySelector("#temperature"),
+  temperatureText: document.querySelector("#temperatureText"),
+  detailAddress: document.querySelector("#detailAddress"),
+  locationAccuracy: document.querySelector("#locationAccuracy"),
   city: document.querySelector("#city"),
+  streetAddress: document.querySelector("#streetAddress"),
   condition: document.querySelector("#condition"),
   humidity: document.querySelector("#humidity"),
   wind: document.querySelector("#wind"),
@@ -36,15 +40,23 @@ const elements = {
   status: document.querySelector("#status"),
   forecast24: document.querySelector("#forecast24"),
   refreshWeather: document.querySelector("#refreshWeather"),
-  useLocation: document.querySelector("#useLocation")
+  relocate: document.querySelector("#relocate"),
+  useDefaultCity: document.querySelector("#useDefaultCity")
 };
 
-const initialWeather = JSON.parse(document.querySelector("#initialWeatherData").textContent);
+const defaultWeather = JSON.parse(document.querySelector("#initialWeatherData").textContent);
+const publicConfig = JSON.parse(document.querySelector("#publicConfig").textContent);
+
+let lastSuccessfulWeather = defaultWeather;
 let currentPlace = {
-  city: initialWeather.city,
-  latitude: initialWeather.latitude,
-  longitude: initialWeather.longitude,
-  sourceLabel: initialWeather.sourceLabel || `默认城市：${initialWeather.city}`
+  city: defaultWeather.city,
+  latitude: defaultWeather.latitude,
+  longitude: defaultWeather.longitude,
+  detailAddress: "当前为默认广州天气",
+  streetAddress: "暂无街道/道路",
+  sourceLabel: defaultWeather.sourceLabel || `默认城市：${defaultWeather.city}`,
+  accuracy: null,
+  isDefault: true
 };
 
 function getWeatherText(code) {
@@ -54,30 +66,12 @@ function getWeatherText(code) {
 function getWeatherIcon(condition) {
   const text = String(condition || "");
 
-  if (text.includes("雷")) {
-    return "⛈";
-  }
-
-  if (text.includes("雨")) {
-    return "🌧";
-  }
-
-  if (text.includes("雪")) {
-    return "❄";
-  }
-
-  if (text.includes("雾") || text.includes("霜")) {
-    return "🌫";
-  }
-
-  if (text.includes("云") || text.includes("阴")) {
-    return "☁";
-  }
-
-  if (text.includes("晴")) {
-    return "☀";
-  }
-
+  if (text.includes("雷")) return "⛈";
+  if (text.includes("雨")) return "🌧";
+  if (text.includes("雪")) return "❄";
+  if (text.includes("雾") || text.includes("霜")) return "🌫";
+  if (text.includes("云") || text.includes("阴")) return "☁";
+  if (text.includes("晴")) return "☀";
   return "🌡";
 }
 
@@ -90,14 +84,10 @@ function getDisplayTimeZone() {
 }
 
 function formatDateTime(value) {
-  if (!value) {
-    return "暂无更新时间";
-  }
+  if (!value) return "暂无更新时间";
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "暂无更新时间";
-  }
+  if (Number.isNaN(date.getTime())) return "暂无更新时间";
 
   const parts = new Intl.DateTimeFormat("zh-CN", {
     timeZone: getDisplayTimeZone(),
@@ -115,9 +105,7 @@ function formatDateTime(value) {
 }
 
 function formatHour(value) {
-  if (!value) {
-    return "--:--";
-  }
+  if (!value) return "--:--";
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -132,29 +120,23 @@ function formatHour(value) {
   }).format(date);
 }
 
+function formatAccuracy(value) {
+  if (!Number.isFinite(Number(value))) {
+    return "默认城市";
+  }
+
+  return `约 ${Math.round(Number(value))} 米`;
+}
+
 function createTip(weather) {
   const condition = String(weather.condition || "");
   const temperature = Number(weather.temperature);
 
-  if (condition.includes("雨")) {
-    return "今天可能下雨，出门记得带伞。";
-  }
-
-  if (condition.includes("雪")) {
-    return "今天有降雪，注意保暖和路面湿滑。";
-  }
-
-  if (Number.isFinite(temperature) && temperature >= 32) {
-    return "今天气温较高，注意防晒和补水。";
-  }
-
-  if (Number.isFinite(temperature) && temperature <= 5) {
-    return "今天气温较低，出门请多穿一点。";
-  }
-
-  if (condition.includes("晴")) {
-    return "今天天气不错，适合安排户外活动。";
-  }
+  if (condition.includes("雨")) return "今天可能下雨，出门记得带伞。";
+  if (condition.includes("雪")) return "今天有降雪，注意保暖和路面湿滑。";
+  if (Number.isFinite(temperature) && temperature >= 32) return "今天气温较高，注意防晒和补水。";
+  if (Number.isFinite(temperature) && temperature <= 5) return "今天气温较低，出门请多穿一点。";
+  if (condition.includes("晴")) return "今天天气不错，适合安排户外活动。";
 
   return "天气变化要留意，出门前再看一眼最新预报。";
 }
@@ -164,33 +146,123 @@ function setStatus(message, isError = false) {
   elements.status.classList.toggle("error", isError);
 }
 
-function buildLocationName(location) {
-  const parts = [
-    location.principalSubdivision,
-    location.city || location.locality,
-    location.localityInfo?.administrative?.find((item) => item.adminLevel === 8)?.name
-  ].filter(Boolean);
-  const uniqueParts = [...new Set(parts)];
-
-  return uniqueParts.length > 0 ? uniqueParts.join(" ") : "当前位置天气";
+function addNearby(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return text.endsWith("附近") ? text : `${text}附近`;
 }
 
-async function getLocationName(latitude, longitude) {
-  try {
-    const url = new URL("https://api.bigdatacloud.net/data/reverse-geocode-client");
-    url.searchParams.set("latitude", latitude);
-    url.searchParams.set("longitude", longitude);
-    url.searchParams.set("localityLanguage", "zh");
+function compactParts(parts) {
+  return [...new Set(parts.map((part) => String(part || "").trim()).filter(Boolean))];
+}
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      return "当前位置天气";
+function buildAmapLocation(regeocode) {
+  const component = regeocode.addressComponent || {};
+  const streetNumber = component.streetNumber || {};
+  const province = component.province || "";
+  const city = Array.isArray(component.city) ? "" : component.city || "";
+  const district = component.district || "";
+  const township = component.township || "";
+  const street = streetNumber.street || "";
+  const number = streetNumber.number || "";
+  const poi = regeocode.pois?.[0]?.name || "";
+  const road = regeocode.roads?.[0]?.name || "";
+  const streetText = compactParts([township, street, number || road || poi]).join(" ");
+  const cityName = compactParts([province, city, district]).join(" ") || "当前位置附近";
+  const formattedAddress = regeocode.formatted_address || "";
+
+  const fallbackWithStreet = compactParts([province, city, district, township, street, number]).join(" ");
+  const fallbackWithPoi = compactParts([province, city, district, township, street || road, poi]).join(" ");
+  const fallbackDistrict = compactParts([province, city, district]).join(" ");
+  const bestAddress = formattedAddress || fallbackWithStreet || fallbackWithPoi || fallbackDistrict || "当前位置";
+
+  return {
+    detailAddress: addNearby(bestAddress),
+    cityName,
+    streetAddress: streetText || road || poi || township || "暂无街道/道路"
+  };
+}
+
+async function getAmapLocation(latitude, longitude) {
+  if (!publicConfig.mapApiKey) {
+    return null;
+  }
+
+  const url = new URL("https://restapi.amap.com/v3/geocode/regeo");
+  url.searchParams.set("key", publicConfig.mapApiKey);
+  url.searchParams.set("location", `${longitude},${latitude}`);
+  url.searchParams.set("extensions", "all");
+  url.searchParams.set("radius", "1000");
+  url.searchParams.set("roadlevel", "0");
+  url.searchParams.set("output", "json");
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error("高德逆地理编码请求失败");
+  }
+
+  const result = await response.json();
+  if (result.status !== "1" || !result.regeocode) {
+    throw new Error(result.info || "高德逆地理编码无结果");
+  }
+
+  return buildAmapLocation(result.regeocode);
+}
+
+function pickAdministrativeName(items, levels) {
+  const match = items.find((item) => levels.includes(item.adminLevel) && item.name);
+  return match?.name || "";
+}
+
+function buildFallbackLocation(location) {
+  const administrative = location.localityInfo?.administrative || [];
+  const province = location.principalSubdivision || pickAdministrativeName(administrative, [4]);
+  const city = location.city || location.locality || pickAdministrativeName(administrative, [5, 6]);
+  const district = pickAdministrativeName(administrative, [7, 8, 9, 10]);
+  const locality = location.locality || "";
+  const parts = compactParts([province, city, district]);
+  const streetAddress = district || locality || "暂无街道/道路";
+  const bestAddress = parts.length > 0 ? parts.join(" ") : locality || "当前位置";
+
+  return {
+    detailAddress: addNearby(bestAddress),
+    cityName: parts.join(" ") || "当前位置附近",
+    streetAddress
+  };
+}
+
+async function getFallbackLocation(latitude, longitude) {
+  const url = new URL("https://api.bigdatacloud.net/data/reverse-geocode-client");
+  url.searchParams.set("latitude", latitude);
+  url.searchParams.set("longitude", longitude);
+  url.searchParams.set("localityLanguage", "zh");
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error("备用逆地理编码请求失败");
+  }
+
+  const location = await response.json();
+  return buildFallbackLocation(location);
+}
+
+async function getLocationDetail(latitude, longitude) {
+  if (publicConfig.mapProvider === "amap" && publicConfig.mapApiKey) {
+    try {
+      return await getAmapLocation(latitude, longitude);
+    } catch {
+      // 高德失败时降级到无 Key 服务，不阻断天气获取。
     }
+  }
 
-    const location = await response.json();
-    return buildLocationName(location);
+  try {
+    return await getFallbackLocation(latitude, longitude);
   } catch {
-    return "当前位置天气";
+    return {
+      detailAddress: "当前位置附近",
+      cityName: "当前位置附近",
+      streetAddress: "暂无街道/道路"
+    };
   }
 }
 
@@ -221,12 +293,17 @@ function renderTrend(forecast) {
 function renderWeather(weather) {
   const temperatureUnit = weather.units?.temperature || "°C";
   const humidityUnit = weather.units?.humidity || "%";
-  const city = weather.city || "当前位置天气";
+  const city = weather.city || "当前位置附近";
 
+  lastSuccessfulWeather = weather;
   elements.cityTitle.textContent = `${city}天气预报`;
   elements.sourceLabel.textContent = weather.sourceLabel || "当前位置天气";
   elements.temperature.textContent = `${weather.temperature ?? "暂无"}${temperatureUnit}`;
+  elements.temperatureText.textContent = `${weather.temperature ?? "暂无"}${temperatureUnit}`;
+  elements.detailAddress.textContent = weather.detailAddress || "当前位置附近";
+  elements.locationAccuracy.textContent = formatAccuracy(weather.locationAccuracy);
   elements.city.textContent = city;
+  elements.streetAddress.textContent = weather.streetAddress || "暂无街道/道路";
   elements.condition.textContent = weather.condition || "暂无";
   elements.humidity.textContent = `${weather.humidity ?? "暂无"}${humidityUnit}`;
   elements.wind.textContent = weather.wind || "暂无";
@@ -280,6 +357,8 @@ function normalizeWeather(data, place) {
     city: place.city,
     latitude: place.latitude,
     longitude: place.longitude,
+    detailAddress: place.detailAddress,
+    streetAddress: place.streetAddress,
     temperature: current.temperature_2m,
     condition: getWeatherText(current.weather_code),
     humidity: current.relative_humidity_2m,
@@ -288,6 +367,7 @@ function normalizeWeather(data, place) {
     fetchedAt: new Date().toISOString(),
     source: "Open-Meteo API",
     sourceLabel: place.sourceLabel,
+    locationAccuracy: place.accuracy,
     forecast24: normalizeForecast(data),
     units: {
       temperature: units.temperature_2m || "°C",
@@ -310,73 +390,105 @@ async function fetchWeatherForPlace(place) {
 async function refreshWeather() {
   try {
     elements.refreshWeather.disabled = true;
-    setStatus("正在刷新天气...");
+    setStatus("正在刷新当前位置天气...");
     const weather = await fetchWeatherForPlace(currentPlace);
     renderWeather(weather);
     setStatus("天气已刷新。");
   } catch (error) {
-    setStatus(`天气刷新失败：${error.message}。已保留当前页面内容。`, true);
+    renderWeather(lastSuccessfulWeather);
+    setStatus(`天气刷新失败：${error.message}。已保留上一次成功天气。`, true);
   } finally {
     elements.refreshWeather.disabled = false;
   }
 }
 
-function useCurrentLocation(isAutomatic = false) {
+function setButtonLoading(isLoading) {
+  elements.relocate.disabled = isLoading;
+  elements.refreshWeather.disabled = isLoading;
+  elements.useDefaultCity.disabled = isLoading;
+}
+
+function useDefaultCity(silent = false) {
+  currentPlace = {
+    city: defaultWeather.city,
+    latitude: defaultWeather.latitude,
+    longitude: defaultWeather.longitude,
+    detailAddress: "当前为默认广州天气",
+    streetAddress: "暂无街道/道路",
+    sourceLabel: defaultWeather.sourceLabel || `默认城市：${defaultWeather.city}`,
+    accuracy: null,
+    isDefault: true
+  };
+  renderWeather({
+    ...defaultWeather,
+    detailAddress: "当前为默认广州天气",
+    streetAddress: "暂无街道/道路",
+    locationAccuracy: ""
+  });
+  if (!silent) {
+    setStatus("已切换为默认广州天气。");
+  }
+}
+
+function buildLocatedPlace(position, detail) {
+  const latitude = position.coords.latitude;
+  const longitude = position.coords.longitude;
+  const accuracy = position.coords.accuracy;
+  const city = detail.cityName || "当前位置附近";
+
+  return {
+    city,
+    latitude,
+    longitude,
+    accuracy,
+    detailAddress: detail.detailAddress || "当前位置附近",
+    streetAddress: detail.streetAddress || "暂无街道/道路",
+    sourceLabel: `当前位置：${detail.detailAddress || city}`,
+    isDefault: false
+  };
+}
+
+function locateUser() {
   if (!navigator.geolocation) {
-    if (!isAutomatic) {
-      setStatus("当前浏览器不支持定位，继续显示默认城市广州天气。", true);
-    }
+    setStatus("当前浏览器不支持定位，继续显示默认广州天气。", true);
     return;
   }
 
-  elements.useLocation.disabled = true;
-  if (!isAutomatic) {
-    setStatus("正在获取当前位置...");
-  }
+  setButtonLoading(true);
+  setStatus("正在获取当前位置...");
   navigator.geolocation.getCurrentPosition(
     async (position) => {
       try {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
-        const locationName = await getLocationName(latitude, longitude);
-        currentPlace = {
-          city: locationName,
-          latitude,
-          longitude,
-          sourceLabel: `当前位置：${locationName}`
-        };
+        const detail = await getLocationDetail(position.coords.latitude, position.coords.longitude);
+        currentPlace = buildLocatedPlace(position, detail);
         const weather = await fetchWeatherForPlace(currentPlace);
         renderWeather(weather);
-        setStatus(isAutomatic ? "" : "已显示当前位置天气。");
+        setStatus(`已显示当前位置附近天气，定位精度约 ${Math.round(position.coords.accuracy)} 米。`);
       } catch (error) {
-        if (!isAutomatic) {
-          setStatus(`当前位置天气获取失败：${error.message}。继续显示默认城市广州天气。`, true);
-        } else {
-          setStatus("");
-        }
+        renderWeather(lastSuccessfulWeather);
+        setStatus(`当前位置天气获取失败：${error.message}。已保留上一次成功天气。`, true);
       } finally {
-        elements.useLocation.disabled = false;
+        setButtonLoading(false);
       }
     },
-    () => {
-      if (!isAutomatic) {
-        setStatus("未获得定位权限或定位失败，继续显示默认城市广州天气。");
-      } else {
-        setStatus("");
-      }
-      elements.useLocation.disabled = false;
+    (error) => {
+      const denied = error.code === error.PERMISSION_DENIED;
+      setStatus(denied ? "你拒绝了定位权限，继续显示默认广州天气。" : "定位失败，继续显示默认广州天气。", !denied);
+      useDefaultCity(true);
+      setButtonLoading(false);
     },
     {
-      enableHighAccuracy: false,
+      enableHighAccuracy: true,
       timeout: 10000,
-      maximumAge: 300000
+      maximumAge: 60000
     }
   );
 }
 
-renderWeather(initialWeather);
+useDefaultCity(true);
 updateCurrentTime();
 setInterval(updateCurrentTime, 1000);
 elements.refreshWeather.addEventListener("click", refreshWeather);
-elements.useLocation.addEventListener("click", () => useCurrentLocation(false));
-useCurrentLocation(true);
+elements.relocate.addEventListener("click", locateUser);
+elements.useDefaultCity.addEventListener("click", () => useDefaultCity(false));
+locateUser();

@@ -64,6 +64,14 @@ async function loadLocalEnv() {
   }
 }
 
+function normalizeCityName(city) {
+  if (city === "广州") {
+    return "广州市";
+  }
+
+  return city;
+}
+
 function readConfig(env) {
   return {
     city: normalizeCityName(env.WEATHER_CITY || DEFAULT_CITY),
@@ -72,14 +80,6 @@ function readConfig(env) {
     apiUrl: env.WEATHER_API_URL || OPEN_METEO_FORECAST_URL,
     apiKey: env.WEATHER_API_KEY || ""
   };
-}
-
-function normalizeCityName(city) {
-  if (city === "广州") {
-    return "广州市";
-  }
-
-  return city;
 }
 
 function getWeatherText(code) {

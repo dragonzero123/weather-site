@@ -30,6 +30,8 @@ jobs:
       WEATHER_LONGITUDE: ${{ vars.WEATHER_LONGITUDE || '113.2644' }}
       WEATHER_API_URL: ${{ vars.WEATHER_API_URL || 'https://api.open-meteo.com/v1/forecast' }}
       WEATHER_API_KEY: ${{ secrets.WEATHER_API_KEY }}
+      MAP_PROVIDER: ${{ vars.MAP_PROVIDER || 'amap' }}
+      MAP_API_KEY: ${{ vars.MAP_API_KEY }}
       WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
     steps:
       - name: Checkout
