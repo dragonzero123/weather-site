@@ -27,10 +27,7 @@ const elements = {
   sourceLabel: document.querySelector("#sourceLabel"),
   temperature: document.querySelector("#temperature"),
   temperatureText: document.querySelector("#temperatureText"),
-  detailAddress: document.querySelector("#detailAddress"),
-  locationAccuracy: document.querySelector("#locationAccuracy"),
   city: document.querySelector("#city"),
-  streetAddress: document.querySelector("#streetAddress"),
   condition: document.querySelector("#condition"),
   humidity: document.querySelector("#humidity"),
   wind: document.querySelector("#wind"),
@@ -39,13 +36,15 @@ const elements = {
   tip: document.querySelector("#tip"),
   status: document.querySelector("#status"),
   forecast24: document.querySelector("#forecast24"),
-  refreshWeather: document.querySelector("#refreshWeather"),
-  relocate: document.querySelector("#relocate"),
-  useDefaultCity: document.querySelector("#useDefaultCity")
+  refreshWeather: document.querySelector("#refreshWeather")
 };
 
 const defaultWeather = JSON.parse(document.querySelector("#initialWeatherData").textContent);
 const publicConfig = JSON.parse(document.querySelector("#publicConfig").textContent);
+
+function normalizeSourceLabel(label, city) {
+  return String(label || `城市：${city}`).replace(/^默认城市：/, "城市：");
+}
 
 let lastSuccessfulWeather = defaultWeather;
 let currentPlace = {
@@ -54,7 +53,7 @@ let currentPlace = {
   longitude: defaultWeather.longitude,
   detailAddress: "当前为默认广州天气",
   streetAddress: "暂无街道/道路",
-  sourceLabel: defaultWeather.sourceLabel || `默认城市：${defaultWeather.city}`,
+  sourceLabel: normalizeSourceLabel(defaultWeather.sourceLabel, defaultWeather.city),
   accuracy: null,
   isDefault: true
 };
@@ -297,13 +296,10 @@ function renderWeather(weather) {
 
   lastSuccessfulWeather = weather;
   elements.cityTitle.textContent = `${city}天气预报`;
-  elements.sourceLabel.textContent = weather.sourceLabel || "当前位置天气";
+  elements.sourceLabel.textContent = normalizeSourceLabel(weather.sourceLabel, city);
   elements.temperature.textContent = `${weather.temperature ?? "暂无"}${temperatureUnit}`;
   elements.temperatureText.textContent = `${weather.temperature ?? "暂无"}${temperatureUnit}`;
-  elements.detailAddress.textContent = weather.detailAddress || "当前位置附近";
-  elements.locationAccuracy.textContent = formatAccuracy(weather.locationAccuracy);
   elements.city.textContent = city;
-  elements.streetAddress.textContent = weather.streetAddress || "暂无街道/道路";
   elements.condition.textContent = weather.condition || "暂无";
   elements.humidity.textContent = `${weather.humidity ?? "暂无"}${humidityUnit}`;
   elements.wind.textContent = weather.wind || "暂无";
@@ -403,9 +399,7 @@ async function refreshWeather() {
 }
 
 function setButtonLoading(isLoading) {
-  elements.relocate.disabled = isLoading;
   elements.refreshWeather.disabled = isLoading;
-  elements.useDefaultCity.disabled = isLoading;
 }
 
 function useDefaultCity(silent = false) {
@@ -415,7 +409,7 @@ function useDefaultCity(silent = false) {
     longitude: defaultWeather.longitude,
     detailAddress: "当前为默认广州天气",
     streetAddress: "暂无街道/道路",
-    sourceLabel: defaultWeather.sourceLabel || `默认城市：${defaultWeather.city}`,
+    sourceLabel: normalizeSourceLabel(defaultWeather.sourceLabel, defaultWeather.city),
     accuracy: null,
     isDefault: true
   };
@@ -489,6 +483,4 @@ useDefaultCity(true);
 updateCurrentTime();
 setInterval(updateCurrentTime, 1000);
 elements.refreshWeather.addEventListener("click", refreshWeather);
-elements.relocate.addEventListener("click", locateUser);
-elements.useDefaultCity.addEventListener("click", () => useDefaultCity(false));
 locateUser();

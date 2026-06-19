@@ -18,6 +18,11 @@ function createSafeJson(value) {
   return JSON.stringify(value).replaceAll("<", "\\u003c");
 }
 
+function createSourceLabel(weather) {
+  const label = weather.sourceLabel || `城市：${weather.city}`;
+  return String(label).replace(/^默认城市：/, "城市：");
+}
+
 function parseEnv(content) {
   const env = {};
 
@@ -63,7 +68,7 @@ function renderPage(weather, publicConfig) {
   const displayWeather = {
     ...weather,
     tip: createWeatherText(weather),
-    sourceLabel: weather.sourceLabel || `默认城市：${weather.city}`,
+    sourceLabel: createSourceLabel(weather),
     locationAccuracy: ""
   };
   const temperatureUnit = weather.units?.temperature || "°C";
@@ -88,23 +93,15 @@ function renderPage(weather, publicConfig) {
         <p class="tip" id="tip">${escapeHtml(displayWeather.tip)}</p>
       </div>
       <div class="actions">
-        <button id="refreshWeather" type="button">刷新当前位置天气</button>
-        <button id="relocate" type="button">重新定位</button>
-        <button id="useDefaultCity" type="button">使用默认广州天气</button>
+        <button id="refreshWeather" type="button">刷新</button>
       </div>
     </div>
 
     <div class="location-details" aria-labelledby="locationTitle">
-      <h2 id="locationTitle">当前位置详情</h2>
+      <h2 id="locationTitle">天气详情</h2>
       <dl>
-        <dt>详细位置</dt>
-        <dd id="detailAddress">当前为默认广州天气</dd>
-        <dt>定位精度</dt>
-        <dd id="locationAccuracy">默认城市</dd>
         <dt>当前城市</dt>
         <dd id="city">${escapeHtml(weather.city)}</dd>
-        <dt>当前街道/道路</dt>
-        <dd id="streetAddress">暂无街道/道路</dd>
         <dt>天气状况</dt>
         <dd id="condition">${escapeHtml(weather.condition)}</dd>
         <dt>温度</dt>

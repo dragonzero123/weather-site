@@ -33,20 +33,15 @@ export async function checkSite() {
     String(weather.temperature),
     String(weather.condition),
     "weather-panel",
-    "当前位置详情",
-    "详细位置",
-    "定位精度",
+    "天气详情",
     "当前城市",
-    "当前街道/道路",
     "天气状况",
     "温度",
     "湿度",
     "风力",
     "数据更新时间",
     "当前时间",
-    "刷新当前位置天气",
-    "重新定位",
-    "使用默认广州天气",
+    "刷新",
     "今日天气趋势",
     "publicConfig",
     "app.js",
@@ -68,7 +63,7 @@ export async function checkSite() {
     "pois",
     "roads",
     "当前位置附近",
-    "useDefaultCity"
+    "locateUser"
   ];
 
   for (const text of requiredAppTexts) {
@@ -77,7 +72,7 @@ export async function checkSite() {
 
   return {
     ok: true,
-    message: "检查通过：网页、真实天气数据、详细定位、定位精度和今日天气趋势正常。"
+    message: "检查通过：网页、真实天气数据、当前位置天气和今日天气趋势正常。"
   };
 }
 

@@ -147,7 +147,7 @@ function normalizeOpenMeteoWeather(data, config, fetchedAt) {
     updatedAt: current.time || "",
     fetchedAt,
     source: "Open-Meteo API",
-    sourceLabel: `默认城市：${config.city}`,
+    sourceLabel: `城市：${config.city}`,
     forecast24: normalizeHourlyForecast(data),
     units: {
       temperature: units.temperature_2m || "°C",
