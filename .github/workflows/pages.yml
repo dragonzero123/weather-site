@@ -25,13 +25,11 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     env:
-      WEATHER_CITY: ${{ vars.WEATHER_CITY || '广州' }}
-      WEATHER_LATITUDE: ${{ vars.WEATHER_LATITUDE || '23.1291' }}
-      WEATHER_LONGITUDE: ${{ vars.WEATHER_LONGITUDE || '113.2644' }}
-      WEATHER_API_URL: ${{ vars.WEATHER_API_URL || 'https://api.open-meteo.com/v1/forecast' }}
-      WEATHER_API_KEY: ${{ secrets.WEATHER_API_KEY }}
-      MAP_PROVIDER: ${{ vars.MAP_PROVIDER || 'amap' }}
-      MAP_API_KEY: ${{ vars.MAP_API_KEY }}
+      AMAP_KEY: ${{ secrets.AMAP_KEY }}
+      AMAP_BROWSER_KEY: ${{ secrets.AMAP_BROWSER_KEY }}
+      DEFAULT_ADCODE: ${{ vars.DEFAULT_ADCODE || '440100' }}
+      DEFAULT_CITY: ${{ vars.DEFAULT_CITY || '广州' }}
+      SITE_NAME: ${{ vars.SITE_NAME || '天气预报' }}
       WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
     steps:
       - name: Checkout

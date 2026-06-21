@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>广州市天气预报</title>
+  <title>天气预报</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -11,9 +11,9 @@
     <section class="weather-panel" aria-label="天气预报信息">
     <div class="hero" aria-labelledby="cityTitle">
       <div>
-        <p class="source-label" id="sourceLabel">城市：广州市</p>
-        <h1 id="cityTitle">广州市天气预报</h1>
-        <p class="temperature" id="temperature">26.5°C</p>
+        <p class="source-label" id="sourceLabel">当前位置：广州市</p>
+        <h1 id="cityTitle">天气预报</h1>
+        <p class="temperature" id="temperature">28°C</p>
         <p class="tip" id="tip">天气变化要留意，出门前再看一眼最新预报。</p>
       </div>
       <div class="actions">
@@ -24,27 +24,39 @@
     <div class="location-details" aria-labelledby="locationTitle">
       <h2 id="locationTitle">天气详情</h2>
       <dl>
-        <dt>当前城市</dt>
-        <dd id="city">广州市</dd>
+        <dt>当前位置</dt>
+        <dd id="currentLocation">广州市</dd>
         <dt>天气状况</dt>
-        <dd id="condition">阴</dd>
+        <dd id="condition">多云</dd>
         <dt>温度</dt>
-        <dd id="temperatureText">26.5°C</dd>
+        <dd id="temperatureText">28°C</dd>
         <dt>湿度</dt>
-        <dd id="humidity">91%</dd>
+        <dd id="humidity">85%</dd>
+        <dt>风向</dt>
+        <dd id="windDirection">南</dd>
         <dt>风力</dt>
-        <dd id="wind">9.7 km/h</dd>
+        <dd id="wind">南风 ≤3级</dd>
         <dt>数据更新时间</dt>
         <dd id="dataUpdatedAt">暂无更新时间</dd>
         <dt>当前时间</dt>
         <dd id="currentTime">正在读取当前时间</dd>
+        <dt>当前天气数据来源</dt>
+        <dd id="dataSource">高德天气 API - 实况天气</dd>
       </dl>
+    </div>
+
+    <div class="hourly-trend" aria-labelledby="hourlyTitle">
+      <div class="section-heading">
+        <h2 id="hourlyTitle">24小时天气趋势</h2>
+        <p>24小时趋势来源：Open-Meteo Forecast API</p>
+      </div>
+      <div class="trend-list hourly-list" id="hourly24" tabindex="0"></div>
     </div>
 
     <div class="trend" aria-labelledby="trendTitle">
       <div class="section-heading">
-        <h2 id="trendTitle">今日天气趋势</h2>
-        <p>未来 24 小时</p>
+        <h2 id="trendTitle">未来几天天气预报</h2>
+        <p>未来几天天气来源：高德天气 API</p>
       </div>
       <div class="trend-list" id="forecast24" tabindex="0"></div>
     </div>
@@ -52,8 +64,8 @@
     <p class="status" id="status" aria-live="polite"></p>
     </section>
   </main>
-  <script id="initialWeatherData" type="application/json">{"city":"广州市","latitude":23.1291,"longitude":113.2644,"temperature":26.5,"condition":"阴","humidity":91,"wind":"9.7 km/h","updatedAt":"2026-06-20T03:30","fetchedAt":"2026-06-19T19:31:30.039Z","source":"Open-Meteo API","sourceLabel":"城市：广州市","forecast24":[{"time":"2026-06-20T04:00","condition":"局部多云","temperature":26.4,"rainChance":22,"wind":"8.7 km/h"},{"time":"2026-06-20T05:00","condition":"局部多云","temperature":26.3,"rainChance":16,"wind":"8.3 km/h"},{"time":"2026-06-20T06:00","condition":"阴","temperature":26.1,"rainChance":10,"wind":"8.9 km/h"},{"time":"2026-06-20T07:00","condition":"阴","temperature":27.2,"rainChance":4,"wind":"8.8 km/h"},{"time":"2026-06-20T08:00","condition":"小毛毛雨","temperature":28.2,"rainChance":4,"wind":"10.7 km/h"},{"time":"2026-06-20T09:00","condition":"雷雨","temperature":29.3,"rainChance":15,"wind":"12.7 km/h"},{"time":"2026-06-20T10:00","condition":"雷雨","temperature":30.7,"rainChance":33,"wind":"12.6 km/h"},{"time":"2026-06-20T11:00","condition":"雷雨","temperature":31.4,"rainChance":47,"wind":"12.3 km/h"},{"time":"2026-06-20T12:00","condition":"雷雨","temperature":32.1,"rainChance":54,"wind":"12.1 km/h"},{"time":"2026-06-20T13:00","condition":"雷雨伴小冰雹","temperature":31.6,"rainChance":58,"wind":"12.4 km/h"},{"time":"2026-06-20T14:00","condition":"雷雨伴小冰雹","temperature":29.9,"rainChance":63,"wind":"14.1 km/h"},{"time":"2026-06-20T15:00","condition":"雷雨伴大冰雹","temperature":30.3,"rainChance":72,"wind":"12.3 km/h"},{"time":"2026-06-20T16:00","condition":"雷雨","temperature":29.8,"rainChance":81,"wind":"12.9 km/h"},{"time":"2026-06-20T17:00","condition":"雷雨","temperature":29.6,"rainChance":82,"wind":"6 km/h"},{"time":"2026-06-20T18:00","condition":"雷雨伴小冰雹","temperature":28.7,"rainChance":69,"wind":"11.2 km/h"},{"time":"2026-06-20T19:00","condition":"雷雨","temperature":28.3,"rainChance":47,"wind":"11.5 km/h"},{"time":"2026-06-20T20:00","condition":"雷雨","temperature":28,"rainChance":29,"wind":"12.7 km/h"},{"time":"2026-06-20T21:00","condition":"阴","temperature":27.7,"rainChance":17,"wind":"12.4 km/h"},{"time":"2026-06-20T22:00","condition":"阴","temperature":27.4,"rainChance":8,"wind":"11.6 km/h"},{"time":"2026-06-20T23:00","condition":"阴","temperature":27.1,"rainChance":2,"wind":"10.9 km/h"},{"time":"2026-06-21T00:00","condition":"阴","temperature":26.8,"rainChance":0,"wind":"10.9 km/h"},{"time":"2026-06-21T01:00","condition":"阴","temperature":26.7,"rainChance":2,"wind":"11 km/h"},{"time":"2026-06-21T02:00","condition":"阴","temperature":26.5,"rainChance":4,"wind":"9.4 km/h"},{"time":"2026-06-21T03:00","condition":"阴","temperature":26.4,"rainChance":5,"wind":"9 km/h"}],"units":{"temperature":"°C","humidity":"%","wind":"km/h"},"tip":"天气变化要留意，出门前再看一眼最新预报。","locationAccuracy":""}</script>
-  <script id="publicConfig" type="application/json">{"mapProvider":"amap","mapApiKey":"","mapSecurityNote":""}</script>
+  <script id="initialWeatherData" type="application/json">{"siteName":"天气预报","city":"广州市","weatherArea":"广州市","adcode":"440100","temperature":"28","condition":"多云","humidity":"85","windDirection":"南","windPower":"≤3","wind":"南风 ≤3级","updatedAt":"2026-06-22 02:31:38","fetchedAt":"2026-06-21T18:57:20.387Z","source":"高德天气 API","sourceLabel":"当前位置：广州市","dataSourceLabel":"数据来源：高德天气 API","hourlySource":"Open-Meteo Forecast API","hourly24":[{"time":"03:00","rawTime":"2026-06-22T03:00","condition":"阴","temperature":26.3,"rainChance":0,"wind":"南风 7.8 km/h","source":"Open-Meteo Forecast API"},{"time":"04:00","rawTime":"2026-06-22T04:00","condition":"少云","temperature":26.2,"rainChance":0,"wind":"南风 7.6 km/h","source":"Open-Meteo Forecast API"},{"time":"05:00","rawTime":"2026-06-22T05:00","condition":"少云","temperature":26.1,"rainChance":0,"wind":"南风 7.3 km/h","source":"Open-Meteo Forecast API"},{"time":"06:00","rawTime":"2026-06-22T06:00","condition":"少云","temperature":26,"rainChance":0,"wind":"南风 6.7 km/h","source":"Open-Meteo Forecast API"},{"time":"07:00","rawTime":"2026-06-22T07:00","condition":"雷雨","temperature":26.8,"rainChance":0,"wind":"南风 7.2 km/h","source":"Open-Meteo Forecast API"},{"time":"08:00","rawTime":"2026-06-22T08:00","condition":"雷雨","temperature":28.2,"rainChance":0,"wind":"南风 9.3 km/h","source":"Open-Meteo Forecast API"},{"time":"09:00","rawTime":"2026-06-22T09:00","condition":"毛毛雨","temperature":29.6,"rainChance":7,"wind":"西南风 11.4 km/h","source":"Open-Meteo Forecast API"},{"time":"10:00","rawTime":"2026-06-22T10:00","condition":"少云","temperature":30.6,"rainChance":18,"wind":"南风 11.6 km/h","source":"Open-Meteo Forecast API"},{"time":"11:00","rawTime":"2026-06-22T11:00","condition":"毛毛雨","temperature":31.5,"rainChance":27,"wind":"南风 11.3 km/h","source":"Open-Meteo Forecast API"},{"time":"12:00","rawTime":"2026-06-22T12:00","condition":"毛毛雨","temperature":32.7,"rainChance":34,"wind":"西南风 11 km/h","source":"Open-Meteo Forecast API"},{"time":"13:00","rawTime":"2026-06-22T13:00","condition":"雷雨","temperature":33.6,"rainChance":41,"wind":"西南风 10.2 km/h","source":"Open-Meteo Forecast API"},{"time":"14:00","rawTime":"2026-06-22T14:00","condition":"雷雨","temperature":34.2,"rainChance":47,"wind":"南风 10.6 km/h","source":"Open-Meteo Forecast API"},{"time":"15:00","rawTime":"2026-06-22T15:00","condition":"雷雨","temperature":34.1,"rainChance":54,"wind":"南风 12.1 km/h","source":"Open-Meteo Forecast API"},{"time":"16:00","rawTime":"2026-06-22T16:00","condition":"雷雨","temperature":34,"rainChance":60,"wind":"南风 13.8 km/h","source":"Open-Meteo Forecast API"},{"time":"17:00","rawTime":"2026-06-22T17:00","condition":"雷雨","temperature":33.6,"rainChance":59,"wind":"南风 13 km/h","source":"Open-Meteo Forecast API"},{"time":"18:00","rawTime":"2026-06-22T18:00","condition":"雷雨","temperature":32.4,"rainChance":46,"wind":"南风 11.9 km/h","source":"Open-Meteo Forecast API"},{"time":"19:00","rawTime":"2026-06-22T19:00","condition":"雷雨","temperature":30.9,"rainChance":26,"wind":"南风 10.7 km/h","source":"Open-Meteo Forecast API"},{"time":"20:00","rawTime":"2026-06-22T20:00","condition":"雷雨","temperature":29.4,"rainChance":10,"wind":"东南风 11.8 km/h","source":"Open-Meteo Forecast API"},{"time":"21:00","rawTime":"2026-06-22T21:00","condition":"晴","temperature":28.4,"rainChance":4,"wind":"南风 12.5 km/h","source":"Open-Meteo Forecast API"},{"time":"22:00","rawTime":"2026-06-22T22:00","condition":"晴","temperature":27.8,"rainChance":3,"wind":"南风 12.1 km/h","source":"Open-Meteo Forecast API"},{"time":"23:00","rawTime":"2026-06-22T23:00","condition":"晴","temperature":27.4,"rainChance":2,"wind":"南风 11.7 km/h","source":"Open-Meteo Forecast API"},{"time":"00:00","rawTime":"2026-06-23T00:00","condition":"晴","temperature":27.2,"rainChance":1,"wind":"南风 10.7 km/h","source":"Open-Meteo Forecast API"},{"time":"01:00","rawTime":"2026-06-23T01:00","condition":"少云","temperature":27,"rainChance":0,"wind":"南风 9 km/h","source":"Open-Meteo Forecast API"},{"time":"02:00","rawTime":"2026-06-23T02:00","condition":"晴","temperature":26.8,"rainChance":0,"wind":"南风 8.4 km/h","source":"Open-Meteo Forecast API"}],"forecast24":[{"label":"今天","time":"2026-06-22","condition":"多云","temperature":"28-34","rainChance":null,"wind":"白天北风 1-3级 / 夜间北风 1-3级"},{"label":"明天","time":"2026-06-23","condition":"多云","temperature":"28-35","rainChance":null,"wind":"白天北风 1-3级 / 夜间北风 1-3级"},{"label":"后天","time":"2026-06-24","condition":"多云转小雨","temperature":"27-34","rainChance":null,"wind":"白天北风 1-3级 / 夜间北风 1-3级"},{"label":"3天后","time":"2026-06-25","condition":"小雨转雷阵雨","temperature":"26-34","rainChance":null,"wind":"白天北风 1-3级 / 夜间北风 1-3级"}],"units":{"temperature":"°C","humidity":"%","wind":"级"},"tip":"天气变化要留意，出门前再看一眼最新预报。","locationAccuracy":""}</script>
+  <script id="publicConfig" type="application/json">{"mapProvider":"amap","mapApiKey":"bf8da898c77c21f0d3c548a7cf4cbf93","defaultAdcode":"440100","defaultCity":"广州","defaultLatitude":"23.1291","defaultLongitude":"113.2644","siteName":"天气预报","mapSecurityNote":""}</script>
   <script src="app.js" defer></script>
 </body>
 </html>

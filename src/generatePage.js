@@ -19,8 +19,10 @@ function createSafeJson(value) {
 }
 
 function createSourceLabel(weather) {
-  const label = weather.sourceLabel || `城市：${weather.city}`;
-  return String(label).replace(/^默认城市：/, "城市：");
+  const label = weather.sourceLabel || `当前位置：${weather.detailAddress || weather.city}`;
+  return String(label)
+    .replace(/^默认城市：/, "当前位置：")
+    .replace(/^城市：/, "当前位置：");
 }
 
 function parseEnv(content) {
@@ -59,7 +61,12 @@ async function readPublicConfig() {
 
   return {
     mapProvider: env.MAP_PROVIDER || "amap",
-    mapApiKey: env.MAP_API_KEY || "",
+    mapApiKey: env.AMAP_BROWSER_KEY || env.AMAP_KEY || "",
+    defaultAdcode: env.DEFAULT_ADCODE || "440100",
+    defaultCity: env.DEFAULT_CITY || "广州",
+    defaultLatitude: env.DEFAULT_LATITUDE || "23.1291",
+    defaultLongitude: env.DEFAULT_LONGITUDE || "113.2644",
+    siteName: env.SITE_NAME || "天气预报",
     mapSecurityNote: env.MAP_SECURITY_NOTE || ""
   };
 }
@@ -69,7 +76,7 @@ function renderPage(weather, publicConfig) {
     ...weather,
     tip: createWeatherText(weather),
     sourceLabel: createSourceLabel(weather),
-    locationAccuracy: ""
+    locationAccuracy: weather.locationAccuracy || ""
   };
   const temperatureUnit = weather.units?.temperature || "°C";
   const humidityUnit = weather.units?.humidity || "%";
@@ -79,7 +86,7 @@ function renderPage(weather, publicConfig) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(weather.city)}天气预报</title>
+  <title>天气预报</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -88,7 +95,7 @@ function renderPage(weather, publicConfig) {
     <div class="hero" aria-labelledby="cityTitle">
       <div>
         <p class="source-label" id="sourceLabel">${escapeHtml(displayWeather.sourceLabel)}</p>
-        <h1 id="cityTitle">${escapeHtml(weather.city)}天气预报</h1>
+        <h1 id="cityTitle">天气预报</h1>
         <p class="temperature" id="temperature">${escapeHtml(weather.temperature)}${escapeHtml(temperatureUnit)}</p>
         <p class="tip" id="tip">${escapeHtml(displayWeather.tip)}</p>
       </div>
@@ -100,27 +107,39 @@ function renderPage(weather, publicConfig) {
     <div class="location-details" aria-labelledby="locationTitle">
       <h2 id="locationTitle">天气详情</h2>
       <dl>
-        <dt>当前城市</dt>
-        <dd id="city">${escapeHtml(weather.city)}</dd>
+        <dt>当前位置</dt>
+        <dd id="currentLocation">${escapeHtml(displayWeather.sourceLabel.replace(/^当前位置：/, ""))}</dd>
         <dt>天气状况</dt>
         <dd id="condition">${escapeHtml(weather.condition)}</dd>
         <dt>温度</dt>
         <dd id="temperatureText">${escapeHtml(weather.temperature)}${escapeHtml(temperatureUnit)}</dd>
         <dt>湿度</dt>
         <dd id="humidity">${escapeHtml(weather.humidity ?? "暂无")}${escapeHtml(humidityUnit)}</dd>
+        <dt>风向</dt>
+        <dd id="windDirection">${escapeHtml(weather.windDirection || "暂无")}</dd>
         <dt>风力</dt>
         <dd id="wind">${escapeHtml(weather.wind || "暂无")}</dd>
         <dt>数据更新时间</dt>
         <dd id="dataUpdatedAt">暂无更新时间</dd>
         <dt>当前时间</dt>
         <dd id="currentTime">正在读取当前时间</dd>
+        <dt>当前天气数据来源</dt>
+        <dd id="dataSource">${escapeHtml(weather.source ? `${weather.source} - 实况天气` : "暂无")}</dd>
       </dl>
+    </div>
+
+    <div class="hourly-trend" aria-labelledby="hourlyTitle">
+      <div class="section-heading">
+        <h2 id="hourlyTitle">24小时天气趋势</h2>
+        <p>24小时趋势来源：Open-Meteo Forecast API</p>
+      </div>
+      <div class="trend-list hourly-list" id="hourly24" tabindex="0"></div>
     </div>
 
     <div class="trend" aria-labelledby="trendTitle">
       <div class="section-heading">
-        <h2 id="trendTitle">今日天气趋势</h2>
-        <p>未来 24 小时</p>
+        <h2 id="trendTitle">未来几天天气预报</h2>
+        <p>未来几天天气来源：高德天气 API</p>
       </div>
       <div class="trend-list" id="forecast24" tabindex="0"></div>
     </div>

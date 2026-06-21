@@ -15,7 +15,9 @@ function createLogEntry(result) {
   const lines = [
     `## ${new Date().toISOString()}`,
     "",
-    `- 获取天气成功：${result.fetchOk ? "是" : "否"}`,
+    `- 调用高德天气 API 成功：${result.fetchOk ? "是" : "否"}`,
+    `- 查询 adcode：${result.adcode || "暂无"}`,
+    `- 天气区域：${result.weatherArea || "暂无"}`,
     `- 生成网页成功：${result.pageOk ? "是" : "否"}`,
     `- 检查通过：${result.checkOk ? "是" : "否"}`
   ];
@@ -38,6 +40,8 @@ export async function updateWeatherSite() {
     pageOk: false,
     checkOk: false,
     source: "",
+    adcode: "",
+    weatherArea: "",
     error: ""
   };
 
@@ -46,6 +50,8 @@ export async function updateWeatherSite() {
     const weather = await fetchWeather();
     result.fetchOk = true;
     result.source = weather.source || "";
+    result.adcode = weather.adcode || "";
+    result.weatherArea = weather.weatherArea || weather.city || "";
 
     await writeFile(DATA_FILE, `${JSON.stringify(weather, null, 2)}\n`, "utf8");
     await generatePage(weather);

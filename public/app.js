@@ -1,40 +1,33 @@
-const WEATHER_CODE_TEXT = {
-  0: "晴",
-  1: "大部晴朗",
-  2: "局部多云",
-  3: "阴",
-  45: "雾",
-  48: "霜雾",
-  51: "小毛毛雨",
-  53: "中等毛毛雨",
-  55: "大毛毛雨",
-  61: "小雨",
-  63: "中雨",
-  65: "大雨",
-  71: "小雪",
-  73: "中雪",
-  75: "大雪",
-  80: "小阵雨",
-  81: "中等阵雨",
-  82: "强阵雨",
-  95: "雷雨",
-  96: "雷雨伴小冰雹",
-  99: "雷雨伴大冰雹"
-};
+const SOURCE_NAME = "高德天气 API";
+const HOURLY_SOURCE_NAME = "Open-Meteo Forecast API";
+const AMAP_REGEOCODE_URL = "https://restapi.amap.com/v3/geocode/regeo";
+const AMAP_WEATHER_URL = "https://restapi.amap.com/v3/weather/weatherInfo";
+const OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast";
+const AUTO_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+const REFRESH_BUTTON_TEXT = "刷新";
+const REFRESHING_BUTTON_TEXT = "刷新中...";
 
 const elements = {
   cityTitle: document.querySelector("#cityTitle"),
   sourceLabel: document.querySelector("#sourceLabel"),
   temperature: document.querySelector("#temperature"),
   temperatureText: document.querySelector("#temperatureText"),
+  currentLocation: document.querySelector("#currentLocation"),
   city: document.querySelector("#city"),
+  weatherArea: document.querySelector("#weatherArea"),
   condition: document.querySelector("#condition"),
   humidity: document.querySelector("#humidity"),
+  windDirection: document.querySelector("#windDirection"),
   wind: document.querySelector("#wind"),
+  locationAccuracy: document.querySelector("#locationAccuracy"),
+  dataSource: document.querySelector("#dataSource"),
   currentTime: document.querySelector("#currentTime"),
   dataUpdatedAt: document.querySelector("#dataUpdatedAt"),
+  lastRefreshTime: document.querySelector("#lastRefreshTime"),
+  nextRefreshTime: document.querySelector("#nextRefreshTime"),
   tip: document.querySelector("#tip"),
   status: document.querySelector("#status"),
+  hourly24: document.querySelector("#hourly24"),
   forecast24: document.querySelector("#forecast24"),
   refreshWeather: document.querySelector("#refreshWeather")
 };
@@ -42,54 +35,189 @@ const elements = {
 const defaultWeather = JSON.parse(document.querySelector("#initialWeatherData").textContent);
 const publicConfig = JSON.parse(document.querySelector("#publicConfig").textContent);
 
-function normalizeSourceLabel(label, city) {
-  return String(label || `城市：${city}`).replace(/^默认城市：/, "城市：");
-}
-
 let lastSuccessfulWeather = defaultWeather;
-let currentPlace = {
-  city: defaultWeather.city,
-  latitude: defaultWeather.latitude,
-  longitude: defaultWeather.longitude,
-  detailAddress: "当前为默认广州天气",
-  streetAddress: "暂无街道/道路",
-  sourceLabel: normalizeSourceLabel(defaultWeather.sourceLabel, defaultWeather.city),
-  accuracy: null,
-  isDefault: true
-};
+let lastPlace = null;
+let autoRefreshTimer = null;
+let lastRefreshAt = null;
+let nextAutoRefreshAt = null;
+let isRefreshing = false;
 
-function getWeatherText(code) {
-  return WEATHER_CODE_TEXT[Number(code)] || "未知天气";
+function getAmapKey() {
+  return publicConfig.mapApiKey || "";
 }
 
-function getWeatherIcon(condition) {
-  const text = String(condition || "");
-
-  if (text.includes("雷")) return "⛈";
-  if (text.includes("雨")) return "🌧";
-  if (text.includes("雪")) return "❄";
-  if (text.includes("雾") || text.includes("霜")) return "🌫";
-  if (text.includes("云") || text.includes("阴")) return "☁";
-  if (text.includes("晴")) return "☀";
-  return "🌡";
-}
-
-function getDisplayTimeZone() {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai";
-  } catch {
-    return "Asia/Shanghai";
+function formatAccuracy(value) {
+  const accuracy = Number(value);
+  if (!Number.isFinite(accuracy) || accuracy <= 0) {
+    return "暂无";
   }
+
+  return `约 ${Math.round(accuracy)} 米`;
+}
+
+function compactParts(parts) {
+  return [...new Set(parts.map((part) => String(part || "").trim()).filter(Boolean))];
+}
+
+function firstValue(...values) {
+  for (const value of values) {
+    if (Array.isArray(value)) continue;
+    const text = String(value || "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function pickObject(...values) {
+  return values.find((value) => value && typeof value === "object" && !Array.isArray(value)) || {};
+}
+
+function addNearby(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return text.endsWith("附近") ? text : `${text}附近`;
+}
+
+function isDistrictName(value) {
+  return /区$|县$|市辖区$|自治县$|旗$/.test(String(value || "").trim());
+}
+
+function isTownName(value) {
+  return /镇$|乡$|街道$|苏木$|办事处$/.test(String(value || "").trim());
+}
+
+function normalizeAdministrativeOrder(district, town) {
+  if (isTownName(district) && isDistrictName(town)) {
+    return { district: town, town: district };
+  }
+
+  return { district, town };
+}
+
+function formatLocation(parts) {
+  const text = compactParts(parts).join(" ");
+  return text ? addNearby(text) : "当前位置附近";
+}
+
+function parseAmapLocation(regeocode) {
+  const component = pickObject(regeocode.addressComponent);
+  const streetNumber = pickObject(component.streetNumber);
+  const streetNumberAlt = pickObject(component.street_number);
+  const roads = regeocode.roads || [];
+  const pois = regeocode.pois || [];
+
+  const province = firstValue(component.province);
+  const city = firstValue(component.city);
+  const district = firstValue(component.district);
+  const town = firstValue(component.township, component.town, component.street);
+  const road = firstValue(streetNumber.street, streetNumberAlt.street, roads[0]?.name, pois[0]?.name);
+  const number = firstValue(streetNumber.number, streetNumberAlt.number);
+  const ordered = normalizeAdministrativeOrder(district, town);
+  const formattedAddress = firstValue(regeocode.formatted_address);
+  const administrativeAddress = formatLocation([province, city, ordered.district, ordered.town, road, number]);
+  const shouldUseAdministrative = compactParts([province, city, ordered.district, ordered.town]).length >= 3;
+  const detailAddress = shouldUseAdministrative ? administrativeAddress : addNearby(formattedAddress) || "当前位置附近";
+
+  return {
+    detailAddress,
+    province,
+    cityName: compactParts([province, city, ordered.district]).join(" ") || city || ordered.district || "当前位置附近",
+    district: ordered.district,
+    town: ordered.town,
+    road,
+    adcode: firstValue(component.adcode)
+  };
+}
+
+function buildRegeocodeUrl(latitude, longitude) {
+  const url = new URL(AMAP_REGEOCODE_URL);
+  url.searchParams.set("key", getAmapKey());
+  url.searchParams.set("location", `${longitude},${latitude}`);
+  url.searchParams.set("extensions", "all");
+  url.searchParams.set("roadlevel", "0");
+  url.searchParams.set("output", "json");
+  return url;
+}
+
+function buildWeatherUrl(adcode, extensions) {
+  const url = new URL(AMAP_WEATHER_URL);
+  url.searchParams.set("key", getAmapKey());
+  url.searchParams.set("city", adcode);
+  url.searchParams.set("extensions", extensions);
+  url.searchParams.set("output", "json");
+  return url;
+}
+
+function buildOpenMeteoUrl(latitude, longitude) {
+  const url = new URL(OPEN_METEO_FORECAST_URL);
+  url.searchParams.set("latitude", latitude);
+  url.searchParams.set("longitude", longitude);
+  url.searchParams.set("hourly", [
+    "temperature_2m",
+    "weather_code",
+    "precipitation_probability",
+    "wind_speed_10m",
+    "wind_direction_10m"
+  ].join(","));
+  url.searchParams.set("forecast_days", "2");
+  url.searchParams.set("timezone", "auto");
+  return url;
+}
+
+async function fetchAmapJson(url, label) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`${label}请求失败，HTTP 状态码：${response.status}`);
+  }
+
+  const data = await response.json();
+  if (data.status !== "1") {
+    throw new Error(`${label}请求失败：${data.info || "未知错误"}`);
+  }
+
+  return data;
+}
+
+async function fetchOpenMeteoHourly(latitude, longitude) {
+  const response = await fetch(buildOpenMeteoUrl(latitude, longitude));
+  if (!response.ok) {
+    throw new Error(`Open-Meteo 24小时趋势请求失败，HTTP 状态码：${response.status}`);
+  }
+
+  const data = await response.json();
+  return normalizeHourly24(data);
+}
+
+async function getLocationDetail(latitude, longitude, accuracy) {
+  if (!getAmapKey()) {
+    throw new Error("缺少高德前端 Key，请配置 AMAP_BROWSER_KEY 或 AMAP_KEY");
+  }
+
+  const result = await fetchAmapJson(buildRegeocodeUrl(latitude, longitude), "高德逆地理编码 API");
+  const regeocode = result.regeocode;
+  if (!regeocode) {
+    throw new Error("高德逆地理编码 API 未返回位置结果");
+  }
+
+  const detail = parseAmapLocation(regeocode);
+  if (!detail.adcode) {
+    throw new Error("高德逆地理编码 API 未返回 adcode");
+  }
+
+  return {
+    ...detail,
+    locationAccuracy: formatAccuracy(accuracy)
+  };
 }
 
 function formatDateTime(value) {
   if (!value) return "暂无更新时间";
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "暂无更新时间";
+  const date = new Date(String(value).replace(" ", "T"));
+  if (Number.isNaN(date.getTime())) return String(value);
 
   const parts = new Intl.DateTimeFormat("zh-CN", {
-    timeZone: getDisplayTimeZone(),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -103,28 +231,43 @@ function formatDateTime(value) {
   return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second}`;
 }
 
-function formatHour(value) {
-  if (!value) return "--:--";
+function forecastLabel(index) {
+  if (index === 0) return "今天";
+  if (index === 1) return "明天";
+  if (index === 2) return "后天";
+  return `${index}天后`;
+}
 
+function weatherCodeText(code) {
+  const value = Number(code);
+  if (value === 0) return "晴";
+  if ([1, 2].includes(value)) return "少云";
+  if (value === 3) return "阴";
+  if ([45, 48].includes(value)) return "雾";
+  if ([51, 53, 55, 56, 57].includes(value)) return "毛毛雨";
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(value)) return "雨";
+  if ([71, 73, 75, 77, 85, 86].includes(value)) return "雪";
+  if ([95, 96, 99].includes(value)) return "雷雨";
+  return "未知天气";
+}
+
+function formatHourTime(value) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return String(value).slice(11, 16) || "--:--";
-  }
+  if (Number.isNaN(date.getTime())) return value || "";
 
   return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: getDisplayTimeZone(),
     hour: "2-digit",
     minute: "2-digit",
     hour12: false
   }).format(date);
 }
 
-function formatAccuracy(value) {
-  if (!Number.isFinite(Number(value))) {
-    return "默认城市";
-  }
+function formatWindDirection(value) {
+  const direction = Number(value);
+  if (!Number.isFinite(direction)) return "暂无";
 
-  return `约 ${Math.round(Number(value))} 米`;
+  const labels = ["北", "东北", "东", "东南", "南", "西南", "西", "西北"];
+  return labels[Math.round(direction / 45) % 8];
 }
 
 function createTip(weather) {
@@ -140,347 +283,345 @@ function createTip(weather) {
   return "天气变化要留意，出门前再看一眼最新预报。";
 }
 
-function setStatus(message, isError = false) {
-  elements.status.textContent = message;
-  elements.status.classList.toggle("error", isError);
+function formatWind(direction, power) {
+  return `${direction || "暂无"}风 ${power || "暂无"}级`;
 }
 
-function addNearby(value) {
-  const text = String(value || "").trim();
-  if (!text) return "";
-  return text.endsWith("附近") ? text : `${text}附近`;
-}
+function normalizeForecast(allWeather) {
+  const casts = allWeather.forecasts?.[0]?.casts || [];
 
-function compactParts(parts) {
-  return [...new Set(parts.map((part) => String(part || "").trim()).filter(Boolean))];
-}
+  return casts.map((cast, index) => {
+    const dayCondition = cast.dayweather || "暂无";
+    const nightCondition = cast.nightweather || "暂无";
+    const condition = dayCondition === nightCondition ? dayCondition : `${dayCondition}转${nightCondition}`;
 
-function buildAmapLocation(regeocode) {
-  const component = regeocode.addressComponent || {};
-  const streetNumber = component.streetNumber || {};
-  const province = component.province || "";
-  const city = Array.isArray(component.city) ? "" : component.city || "";
-  const district = component.district || "";
-  const township = component.township || "";
-  const street = streetNumber.street || "";
-  const number = streetNumber.number || "";
-  const poi = regeocode.pois?.[0]?.name || "";
-  const road = regeocode.roads?.[0]?.name || "";
-  const streetText = compactParts([township, street, number || road || poi]).join(" ");
-  const cityName = compactParts([province, city, district]).join(" ") || "当前位置附近";
-  const formattedAddress = regeocode.formatted_address || "";
-
-  const fallbackWithStreet = compactParts([province, city, district, township, street, number]).join(" ");
-  const fallbackWithPoi = compactParts([province, city, district, township, street || road, poi]).join(" ");
-  const fallbackDistrict = compactParts([province, city, district]).join(" ");
-  const bestAddress = formattedAddress || fallbackWithStreet || fallbackWithPoi || fallbackDistrict || "当前位置";
-
-  return {
-    detailAddress: addNearby(bestAddress),
-    cityName,
-    streetAddress: streetText || road || poi || township || "暂无街道/道路"
-  };
-}
-
-async function getAmapLocation(latitude, longitude) {
-  if (!publicConfig.mapApiKey) {
-    return null;
-  }
-
-  const url = new URL("https://restapi.amap.com/v3/geocode/regeo");
-  url.searchParams.set("key", publicConfig.mapApiKey);
-  url.searchParams.set("location", `${longitude},${latitude}`);
-  url.searchParams.set("extensions", "all");
-  url.searchParams.set("radius", "1000");
-  url.searchParams.set("roadlevel", "0");
-  url.searchParams.set("output", "json");
-
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error("高德逆地理编码请求失败");
-  }
-
-  const result = await response.json();
-  if (result.status !== "1" || !result.regeocode) {
-    throw new Error(result.info || "高德逆地理编码无结果");
-  }
-
-  return buildAmapLocation(result.regeocode);
-}
-
-function pickAdministrativeName(items, levels) {
-  const match = items.find((item) => levels.includes(item.adminLevel) && item.name);
-  return match?.name || "";
-}
-
-function buildFallbackLocation(location) {
-  const administrative = location.localityInfo?.administrative || [];
-  const province = location.principalSubdivision || pickAdministrativeName(administrative, [4]);
-  const city = location.city || location.locality || pickAdministrativeName(administrative, [5, 6]);
-  const district = pickAdministrativeName(administrative, [7, 8, 9, 10]);
-  const locality = location.locality || "";
-  const parts = compactParts([province, city, district]);
-  const streetAddress = district || locality || "暂无街道/道路";
-  const bestAddress = parts.length > 0 ? parts.join(" ") : locality || "当前位置";
-
-  return {
-    detailAddress: addNearby(bestAddress),
-    cityName: parts.join(" ") || "当前位置附近",
-    streetAddress
-  };
-}
-
-async function getFallbackLocation(latitude, longitude) {
-  const url = new URL("https://api.bigdatacloud.net/data/reverse-geocode-client");
-  url.searchParams.set("latitude", latitude);
-  url.searchParams.set("longitude", longitude);
-  url.searchParams.set("localityLanguage", "zh");
-
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error("备用逆地理编码请求失败");
-  }
-
-  const location = await response.json();
-  return buildFallbackLocation(location);
-}
-
-async function getLocationDetail(latitude, longitude) {
-  if (publicConfig.mapProvider === "amap" && publicConfig.mapApiKey) {
-    try {
-      return await getAmapLocation(latitude, longitude);
-    } catch {
-      // 高德失败时降级到无 Key 服务，不阻断天气获取。
-    }
-  }
-
-  try {
-    return await getFallbackLocation(latitude, longitude);
-  } catch {
     return {
-      detailAddress: "当前位置附近",
-      cityName: "当前位置附近",
-      streetAddress: "暂无街道/道路"
+      label: forecastLabel(index),
+      time: cast.date || "",
+      condition,
+      temperature: `${cast.nighttemp || "暂无"}-${cast.daytemp || "暂无"}`,
+      rainChance: null,
+      wind: `白天${cast.daywind || "暂无"}风 ${cast.daypower || "暂无"}级 / 夜间${cast.nightwind || "暂无"}风 ${cast.nightpower || "暂无"}级`
     };
-  }
+  });
 }
 
-function renderTrend(forecast) {
-  const items = Array.isArray(forecast) ? forecast.slice(0, 24) : [];
+function normalizeHourly24(openMeteoWeather) {
+  const hourly = openMeteoWeather?.hourly || {};
+  const times = hourly.time || [];
+  if (!Array.isArray(times) || times.length === 0) {
+    return [];
+  }
+
+  const now = Date.now();
+  const firstFutureIndex = times.findIndex((time) => new Date(time).getTime() >= now);
+  const startIndex = firstFutureIndex === -1 ? 0 : firstFutureIndex;
+
+  return times.slice(startIndex, startIndex + 24).map((time, offset) => {
+    const index = startIndex + offset;
+    const temperature = hourly.temperature_2m?.[index];
+    const weatherCode = hourly.weather_code?.[index];
+    const rainChance = hourly.precipitation_probability?.[index];
+    const windSpeed = hourly.wind_speed_10m?.[index];
+    const windDirection = hourly.wind_direction_10m?.[index];
+    const windDirectionText = formatWindDirection(windDirection);
+
+    return {
+      time: formatHourTime(time),
+      rawTime: time,
+      condition: weatherCodeText(weatherCode),
+      temperature,
+      rainChance: rainChance ?? null,
+      wind: Number.isFinite(Number(windSpeed)) ? `${windDirectionText}风 ${windSpeed} km/h` : `${windDirectionText}风`,
+      source: HOURLY_SOURCE_NAME
+    };
+  });
+}
+
+function normalizeWeather(baseWeather, allWeather, hourly24, place) {
+  const live = baseWeather.lives?.[0];
+  if (!live) {
+    throw new Error("高德天气 API 未返回实况天气");
+  }
+
+  const forecast = allWeather.forecasts?.[0] || {};
+  const reporttime = live.reporttime || forecast.reporttime || "";
+  const city = live.city || forecast.city || place.cityName;
+  const adcode = live.adcode || forecast.adcode || place.adcode;
+
+  return {
+    siteName: publicConfig.siteName || "天气预报",
+    city,
+    weatherArea: place.district || city,
+    adcode,
+    detailAddress: place.detailAddress,
+    temperature: live.temperature,
+    condition: live.weather,
+    humidity: live.humidity,
+    windDirection: live.winddirection || "",
+    windPower: live.windpower || "",
+    wind: formatWind(live.winddirection, live.windpower),
+    updatedAt: reporttime,
+    fetchedAt: new Date().toISOString(),
+    source: SOURCE_NAME,
+    sourceLabel: `当前位置：${place.detailAddress}`,
+    dataSourceLabel: `数据来源：${SOURCE_NAME}`,
+    locationAccuracy: place.locationAccuracy || "",
+    hourlySource: HOURLY_SOURCE_NAME,
+    hourly24,
+    forecast24: normalizeForecast(allWeather),
+    units: {
+      temperature: "°C",
+      humidity: "%",
+      wind: "级"
+    }
+  };
+}
+
+async function fetchWeatherByAdcode(place) {
+  const baseWeather = await fetchAmapJson(buildWeatherUrl(place.adcode, "base"), "高德实况天气 API");
+  const allWeather = await fetchAmapJson(buildWeatherUrl(place.adcode, "all"), "高德天气预报 API");
+  let hourly24 = Array.isArray(lastSuccessfulWeather.hourly24) ? lastSuccessfulWeather.hourly24 : [];
+  try {
+    hourly24 = await fetchOpenMeteoHourly(place.latitude, place.longitude);
+  } catch {
+    hourly24 = Array.isArray(lastSuccessfulWeather.hourly24) ? lastSuccessfulWeather.hourly24 : [];
+  }
+  return normalizeWeather(baseWeather, allWeather, hourly24, place);
+}
+
+function renderHourlyTrend(hourly) {
+  const items = Array.isArray(hourly) ? hourly : [];
   if (items.length === 0) {
-    elements.forecast24.innerHTML = '<p class="empty">暂无未来 24 小时趋势</p>';
+    elements.hourly24.innerHTML = '<p class="empty">暂未获取到 24 小时逐小时天气数据，请查看未来几天天气预报。</p>';
     return;
   }
 
-  elements.forecast24.innerHTML = items.map((item) => {
-    const rainText = item.rainChance === undefined || item.rainChance === null
-      ? `风力 ${item.wind || "暂无"}`
-      : `降雨 ${item.rainChance}%`;
+  elements.hourly24.innerHTML = items.map((item) => `
+    <article class="trend-card hourly-card">
+      <time>${item.time || "暂无时间"}</time>
+      <div class="weather-icon" aria-hidden="true">☁</div>
+      <strong>${item.condition || "未知天气"}</strong>
+      <span>${item.temperature ?? "暂无"}°C</span>
+      <small>${item.rainChance === null || item.rainChance === undefined ? "降雨 暂无" : `降雨 ${item.rainChance}%`}</small>
+      <small>${item.wind || "暂无风力"}</small>
+    </article>
+  `).join("");
+}
 
-    return `
-      <article class="trend-card">
-        <time>${formatHour(item.time)}</time>
-        <div class="weather-icon" aria-hidden="true">${getWeatherIcon(item.condition)}</div>
-        <strong>${item.condition || "未知天气"}</strong>
-        <span>${item.temperature ?? "暂无"}°C</span>
-        <small>${rainText}</small>
-      </article>
-    `;
-  }).join("");
+function renderTrend(forecast) {
+  const items = Array.isArray(forecast) ? forecast : [];
+  if (items.length === 0) {
+    elements.forecast24.innerHTML = '<p class="empty">暂无未来几天天气预报</p>';
+    return;
+  }
+
+  elements.forecast24.innerHTML = items.map((item, index) => `
+    <article class="trend-card">
+      <span class="forecast-label">${item.label || forecastLabel(index)}</span>
+      <time>${item.time || "暂无日期"}</time>
+      <div class="weather-icon" aria-hidden="true">☁</div>
+      <strong>${item.condition || "未知天气"}</strong>
+      <span>${item.temperature ?? "暂无"}°C</span>
+      <small>${item.wind || "暂无风力"}</small>
+    </article>
+  `).join("");
+}
+
+function renderRefreshTimes(lastRefreshAt = null) {
+  if (elements.lastRefreshTime) {
+    elements.lastRefreshTime.textContent = lastRefreshAt ? formatDateTime(lastRefreshAt) : "暂无刷新记录";
+  }
+
+  if (elements.nextRefreshTime) {
+    elements.nextRefreshTime.textContent = nextAutoRefreshAt ? formatDateTime(nextAutoRefreshAt) : "正在计算";
+  }
 }
 
 function renderWeather(weather) {
   const temperatureUnit = weather.units?.temperature || "°C";
   const humidityUnit = weather.units?.humidity || "%";
-  const city = weather.city || "当前位置附近";
+  const currentLocation = weather.detailAddress || weather.city || "当前位置附近";
 
   lastSuccessfulWeather = weather;
-  elements.cityTitle.textContent = `${city}天气预报`;
-  elements.sourceLabel.textContent = normalizeSourceLabel(weather.sourceLabel, city);
+  elements.cityTitle.textContent = weather.siteName || "天气预报";
+  elements.sourceLabel.textContent = weather.sourceLabel || `当前位置：${currentLocation}`;
   elements.temperature.textContent = `${weather.temperature ?? "暂无"}${temperatureUnit}`;
   elements.temperatureText.textContent = `${weather.temperature ?? "暂无"}${temperatureUnit}`;
-  elements.city.textContent = city;
+  elements.currentLocation.textContent = currentLocation;
+  if (elements.city) elements.city.textContent = weather.city || "暂无";
+  if (elements.weatherArea) elements.weatherArea.textContent = weather.weatherArea || weather.city || "暂无";
   elements.condition.textContent = weather.condition || "暂无";
   elements.humidity.textContent = `${weather.humidity ?? "暂无"}${humidityUnit}`;
+  elements.windDirection.textContent = weather.windDirection || "暂无";
   elements.wind.textContent = weather.wind || "暂无";
-  elements.dataUpdatedAt.textContent = formatDateTime(weather.fetchedAt);
+  if (elements.locationAccuracy) elements.locationAccuracy.textContent = weather.locationAccuracy || "暂无";
+  elements.dataUpdatedAt.textContent = formatDateTime(weather.updatedAt || weather.fetchedAt);
+  elements.dataSource.textContent = `${weather.source || SOURCE_NAME} - 实况天气`;
   elements.tip.textContent = weather.tip || createTip(weather);
+  renderHourlyTrend(weather.hourly24);
   renderTrend(weather.forecast24);
+}
+
+function setStatus(message, isError = false) {
+  elements.status.textContent = message;
+  elements.status.classList.toggle("error", isError);
 }
 
 function updateCurrentTime() {
   elements.currentTime.textContent = formatDateTime(new Date().toISOString());
 }
 
-function buildOpenMeteoUrl(latitude, longitude) {
-  const url = new URL("https://api.open-meteo.com/v1/forecast");
-  url.searchParams.set("latitude", latitude);
-  url.searchParams.set("longitude", longitude);
-  url.searchParams.set("current", "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m");
-  url.searchParams.set("hourly", "temperature_2m,weather_code,precipitation_probability,wind_speed_10m");
-  url.searchParams.set("forecast_days", "2");
-  url.searchParams.set("timezone", "auto");
-  return url;
-}
-
-function normalizeForecast(data) {
-  const hourly = data.hourly || {};
-  const units = data.hourly_units || {};
-  const times = hourly.time || [];
-  const currentTime = data.current?.time || times[0] || "";
-  const startIndex = Math.max(0, times.findIndex((time) => time >= currentTime));
-
-  return times.slice(startIndex, startIndex + 24).map((time, index) => {
-    const sourceIndex = startIndex + index;
-    const windSpeed = hourly.wind_speed_10m?.[sourceIndex];
-
-    return {
-      time,
-      condition: getWeatherText(hourly.weather_code?.[sourceIndex]),
-      temperature: hourly.temperature_2m?.[sourceIndex],
-      rainChance: hourly.precipitation_probability?.[sourceIndex],
-      wind: windSpeed === undefined || windSpeed === null ? "暂无" : `${windSpeed} ${units.wind_speed_10m || "km/h"}`
-    };
-  });
-}
-
-function normalizeWeather(data, place) {
-  const current = data.current || {};
-  const units = data.current_units || {};
-  const windSpeed = current.wind_speed_10m;
-
-  return {
-    city: place.city,
-    latitude: place.latitude,
-    longitude: place.longitude,
-    detailAddress: place.detailAddress,
-    streetAddress: place.streetAddress,
-    temperature: current.temperature_2m,
-    condition: getWeatherText(current.weather_code),
-    humidity: current.relative_humidity_2m,
-    wind: windSpeed === undefined || windSpeed === null ? "暂无" : `${windSpeed} ${units.wind_speed_10m || "km/h"}`,
-    updatedAt: current.time || "",
-    fetchedAt: new Date().toISOString(),
-    source: "Open-Meteo API",
-    sourceLabel: place.sourceLabel,
-    locationAccuracy: place.accuracy,
-    forecast24: normalizeForecast(data),
-    units: {
-      temperature: units.temperature_2m || "°C",
-      humidity: units.relative_humidity_2m || "%",
-      wind: units.wind_speed_10m || "km/h"
-    }
-  };
-}
-
-async function fetchWeatherForPlace(place) {
-  const response = await fetch(buildOpenMeteoUrl(place.latitude, place.longitude));
-  if (!response.ok) {
-    throw new Error(`天气 API 请求失败，状态码：${response.status}`);
-  }
-
-  const data = await response.json();
-  return normalizeWeather(data, place);
-}
-
-async function refreshWeather() {
-  try {
-    elements.refreshWeather.disabled = true;
-    setStatus("正在刷新当前位置天气...");
-    const weather = await fetchWeatherForPlace(currentPlace);
-    renderWeather(weather);
-    setStatus("天气已刷新。");
-  } catch (error) {
-    renderWeather(lastSuccessfulWeather);
-    setStatus(`天气刷新失败：${error.message}。已保留上一次成功天气。`, true);
-  } finally {
-    elements.refreshWeather.disabled = false;
-  }
-}
-
 function setButtonLoading(isLoading) {
   elements.refreshWeather.disabled = isLoading;
+  elements.refreshWeather.textContent = isLoading ? REFRESHING_BUTTON_TEXT : REFRESH_BUTTON_TEXT;
 }
 
-function useDefaultCity(silent = false) {
-  currentPlace = {
-    city: defaultWeather.city,
-    latitude: defaultWeather.latitude,
-    longitude: defaultWeather.longitude,
-    detailAddress: "当前为默认广州天气",
-    streetAddress: "暂无街道/道路",
-    sourceLabel: normalizeSourceLabel(defaultWeather.sourceLabel, defaultWeather.city),
-    accuracy: null,
-    isDefault: true
+function markRefreshSuccess() {
+  const refreshedAt = new Date().toISOString();
+  lastRefreshAt = refreshedAt;
+  nextAutoRefreshAt = new Date(Date.now() + AUTO_REFRESH_INTERVAL_MS).toISOString();
+  renderRefreshTimes(refreshedAt);
+}
+
+function scheduleAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+  }
+
+  nextAutoRefreshAt = new Date(Date.now() + AUTO_REFRESH_INTERVAL_MS).toISOString();
+  renderRefreshTimes(lastRefreshAt);
+  autoRefreshTimer = setInterval(() => {
+    refreshWeather({ silent: true });
+  }, AUTO_REFRESH_INTERVAL_MS);
+}
+
+function createDefaultPlace() {
+  return {
+    adcode: defaultWeather.adcode || publicConfig.defaultAdcode,
+    detailAddress: defaultWeather.detailAddress || defaultWeather.city || publicConfig.defaultCity || "广州",
+    cityName: defaultWeather.city || publicConfig.defaultCity || "广州",
+    district: defaultWeather.weatherArea || defaultWeather.city || publicConfig.defaultCity || "广州",
+    locationAccuracy: "暂无",
+    latitude: publicConfig.defaultLatitude,
+    longitude: publicConfig.defaultLongitude
   };
+}
+
+async function refreshDefaultWeather(message = "已显示默认城市广州天气") {
+  if (!getAmapKey()) {
+    useDefaultWeather("缺少高德前端 Key，请配置 AMAP_BROWSER_KEY 或 AMAP_KEY，已显示默认城市广州天气");
+    return false;
+  }
+
+  const weather = await fetchWeatherByAdcode(createDefaultPlace());
+  lastPlace = null;
+  renderWeather(weather);
+  markRefreshSuccess();
+  setStatus(message);
+  return true;
+}
+
+function useDefaultWeather(message = "定位失败，已显示默认城市广州天气") {
   renderWeather({
     ...defaultWeather,
-    detailAddress: "当前为默认广州天气",
-    streetAddress: "暂无街道/道路",
-    locationAccuracy: ""
+    source: defaultWeather.source || SOURCE_NAME
   });
-  if (!silent) {
-    setStatus("已切换为默认广州天气。");
-  }
+  lastPlace = null;
+  setStatus(message);
 }
 
-function buildLocatedPlace(position, detail) {
-  const latitude = position.coords.latitude;
-  const longitude = position.coords.longitude;
-  const accuracy = position.coords.accuracy;
-  const city = detail.cityName || "当前位置附近";
-
-  return {
-    city,
-    latitude,
-    longitude,
-    accuracy,
-    detailAddress: detail.detailAddress || "当前位置附近",
-    streetAddress: detail.streetAddress || "暂无街道/道路",
-    sourceLabel: `当前位置：${detail.detailAddress || city}`,
-    isDefault: false
-  };
-}
-
-function locateUser() {
+async function locateUser(options = {}) {
   if (!navigator.geolocation) {
-    setStatus("当前浏览器不支持定位，继续显示默认广州天气。", true);
-    return;
+    return refreshDefaultWeather("当前浏览器不支持定位，已刷新默认城市广州天气");
   }
 
-  setButtonLoading(true);
-  setStatus("正在获取当前位置...");
-  navigator.geolocation.getCurrentPosition(
+  if (!getAmapKey()) {
+    useDefaultWeather("缺少高德前端 Key，请配置 AMAP_BROWSER_KEY 或 AMAP_KEY，已显示默认城市广州天气");
+    return false;
+  }
+
+  if (!options.silent) setStatus("正在获取当前位置...");
+
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
     async (position) => {
       try {
-        const detail = await getLocationDetail(position.coords.latitude, position.coords.longitude);
-        currentPlace = buildLocatedPlace(position, detail);
-        const weather = await fetchWeatherForPlace(currentPlace);
+        const { latitude, longitude, accuracy } = position.coords;
+        const detail = await getLocationDetail(latitude, longitude, accuracy);
+        detail.latitude = latitude;
+        detail.longitude = longitude;
+        const weather = await fetchWeatherByAdcode(detail);
+        lastPlace = detail;
         renderWeather(weather);
-        setStatus(`已显示当前位置附近天气，定位精度约 ${Math.round(position.coords.accuracy)} 米。`);
+        markRefreshSuccess();
+        if (!options.silent) setStatus("天气已更新。");
+        resolve(true);
       } catch (error) {
-        renderWeather(lastSuccessfulWeather);
-        setStatus(`当前位置天气获取失败：${error.message}。已保留上一次成功天气。`, true);
-      } finally {
-        setButtonLoading(false);
+        if (String(error.message).includes("逆地理编码") || String(error.message).includes("adcode")) {
+          try {
+            await refreshDefaultWeather("定位失败，已刷新默认城市广州天气");
+          } catch (fallbackError) {
+            renderWeather(lastSuccessfulWeather);
+            setStatus(`定位失败，默认城市天气刷新失败：${fallbackError.message}。已保留上一次成功数据。`, true);
+          }
+        } else {
+          renderWeather(lastSuccessfulWeather);
+          setStatus(`当前位置天气获取失败：${error.message}。已保留上一次成功数据。`, true);
+        }
+        resolve(false);
       }
     },
-    (error) => {
-      const denied = error.code === error.PERMISSION_DENIED;
-      setStatus(denied ? "你拒绝了定位权限，继续显示默认广州天气。" : "定位失败，继续显示默认广州天气。", !denied);
-      useDefaultCity(true);
-      setButtonLoading(false);
+    () => {
+      refreshDefaultWeather("定位失败，已刷新默认城市广州天气")
+        .then(resolve)
+        .catch((error) => {
+          useDefaultWeather(`定位失败，默认城市天气刷新失败：${error.message}。已保留上一次成功数据。`);
+          resolve(false);
+        });
     },
     {
       enableHighAccuracy: true,
       timeout: 10000,
       maximumAge: 60000
     }
-  );
+    );
+  });
 }
 
-useDefaultCity(true);
+async function refreshWeather(options = {}) {
+  if (isRefreshing) return false;
+
+  isRefreshing = true;
+  if (!options.silent) {
+    setButtonLoading(true);
+    setStatus("正在刷新天气...");
+  }
+
+  try {
+    if (lastPlace) {
+      const weather = await fetchWeatherByAdcode(lastPlace);
+      renderWeather(weather);
+      markRefreshSuccess();
+      if (!options.silent) setStatus("天气已更新。");
+      return true;
+    }
+
+    return await locateUser(options);
+  } catch (error) {
+    renderWeather(lastSuccessfulWeather);
+    setStatus(`天气刷新失败：${error.message}。已保留上一次成功数据。`, true);
+    return false;
+  } finally {
+    isRefreshing = false;
+    if (!options.silent) setButtonLoading(false);
+  }
+}
+
+renderWeather(defaultWeather);
 updateCurrentTime();
+markRefreshSuccess();
+scheduleAutoRefresh();
 setInterval(updateCurrentTime, 1000);
-elements.refreshWeather.addEventListener("click", refreshWeather);
-locateUser();
+elements.refreshWeather.addEventListener("click", () => refreshWeather());
+locateUser({ silent: true });

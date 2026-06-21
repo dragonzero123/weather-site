@@ -155,6 +155,7 @@ button:disabled {
 }
 
 .location-details,
+.hourly-trend,
 .trend {
   border-top: 1px solid rgba(87, 121, 145, 0.2);
   padding: 28px 0;
@@ -225,10 +226,22 @@ h2 {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78);
 }
 
+.hourly-card {
+  min-height: 178px;
+}
+
 .trend-card time,
 .trend-card small {
   color: #57758b;
   display: block;
+}
+
+.forecast-label {
+  color: #08756f;
+  display: block;
+  font-size: 16px;
+  font-weight: 900;
+  margin-bottom: 6px;
 }
 
 .trend-card strong,
@@ -258,6 +271,14 @@ h2 {
 .empty,
 .status {
   color: #57758b;
+}
+
+.empty {
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px dashed rgba(87, 121, 145, 0.38);
+  border-radius: 14px;
+  margin: 0;
+  padding: 18px;
 }
 
 .status {
@@ -303,6 +324,7 @@ h2 {
   }
 
   .location-details,
+  .hourly-trend,
   .trend {
     padding: 24px 0;
   }
@@ -314,6 +336,7 @@ h2 {
 
   dd {
     margin-bottom: 10px;
+    overflow-wrap: anywhere;
   }
 
   .section-heading {
