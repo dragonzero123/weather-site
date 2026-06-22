@@ -13,21 +13,29 @@ function getRequiredEnv(name) {
 
 function createMessage(weather) {
   const siteUrl = process.env.SITE_URL || "";
+  const defaultCity = process.env.DEFAULT_CITY || weather.city || "默认城市";
   const lines = [
     "## 天气预报已更新",
     "",
-    `城市：${weather.city}`,
-    `温度：${weather.temperature}${weather.units?.temperature || "°C"}`,
+    `默认推送城市：${defaultCity}`
+  ];
+
+  if (siteUrl) {
+    lines.push(
+      "打开网页后可自动定位你所在位置天气：",
+      siteUrl,
+      ""
+    );
+  }
+
+  lines.push(
     `天气：${weather.condition}`,
+    `温度：${weather.temperature}${weather.units?.temperature || "°C"}`,
     `湿度：${weather.humidity}${weather.units?.humidity || "%"}`,
     `风力：${weather.wind || "暂无"}`,
     `更新时间：${weather.updatedAt}`,
     `数据来源：${weather.source}`
-  ];
-
-  if (siteUrl) {
-    lines.push("", `[查看天气网页](${siteUrl})`);
-  }
+  );
 
   return lines.join("\n");
 }

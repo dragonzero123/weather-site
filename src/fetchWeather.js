@@ -100,7 +100,7 @@ function buildOpenMeteoUrl(latitude, longitude) {
     "wind_direction_10m"
   ].join(","));
   url.searchParams.set("forecast_days", "2");
-  url.searchParams.set("timezone", "auto");
+  url.searchParams.set("timezone", "Asia/Shanghai");
   return url;
 }
 
@@ -126,17 +126,42 @@ function forecastLabel(index) {
   return `${index}天后`;
 }
 
-function weatherCodeText(code) {
+function weatherIcon(condition) {
+  const text = String(condition || "");
+  if (/雷阵雨|雷雨/.test(text)) return "⛈️";
+  if (/雨/.test(text)) return "🌧️";
+  if (/雪/.test(text)) return "🌨️";
+  if (/雾|霾/.test(text)) return "🌫️";
+  if (/沙尘|扬沙|浮尘/.test(text)) return "🌪️";
+  if (/晴/.test(text)) return "☀️";
+  if (/多云|少云/.test(text)) return "🌤️";
+  if (/阴/.test(text)) return "☁️";
+  return "☁️";
+}
+
+function rainChanceText(rainChance) {
+  if (rainChance === null || rainChance === undefined) return "降雨 暂无";
+  return `降雨 ${rainChance}%`;
+}
+
+function weatherCodeInfo(code) {
   const value = Number(code);
-  if (value === 0) return "晴";
-  if ([1, 2].includes(value)) return "少云";
-  if (value === 3) return "阴";
-  if ([45, 48].includes(value)) return "雾";
-  if ([51, 53, 55, 56, 57].includes(value)) return "毛毛雨";
-  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(value)) return "雨";
-  if ([71, 73, 75, 77, 85, 86].includes(value)) return "雪";
-  if ([95, 96, 99].includes(value)) return "雷雨";
-  return "未知天气";
+  if (value === 0) return { condition: "晴", icon: "☀️" };
+  if ([1, 2].includes(value)) return { condition: "晴间多云", icon: "🌤️" };
+  if (value === 3) return { condition: "阴/多云", icon: "☁️" };
+  if ([45, 48].includes(value)) return { condition: "雾", icon: "🌫️" };
+  if ([51, 53, 55].includes(value)) return { condition: "毛毛雨", icon: "🌦️" };
+  if ([61, 63, 65].includes(value)) return { condition: "雨", icon: "🌧️" };
+  if ([80, 81, 82].includes(value)) return { condition: "阵雨", icon: "🌧️" };
+  if ([95, 96, 99].includes(value)) return { condition: "雷雨", icon: "⛈️" };
+  if ([71, 73, 75, 77, 85, 86].includes(value)) return { condition: "雪", icon: "🌨️" };
+  return { condition: "未知天气", icon: "☁️" };
+}
+
+function createHourlyTrendText(weatherInfo, rainChance) {
+  const condition = weatherInfo.condition || "未知天气";
+  if (condition === "未知天气") return rainChanceText(rainChance);
+  return condition;
 }
 
 function formatHourTime(value) {
@@ -177,11 +202,15 @@ function normalizeHourly24(openMeteoWeather) {
     const windSpeed = hourly.wind_speed_10m?.[index];
     const windDirection = hourly.wind_direction_10m?.[index];
     const windDirectionText = formatWindDirection(windDirection);
+    const weatherInfo = weatherCodeInfo(weatherCode);
 
     return {
       time: formatHourTime(time),
       rawTime: time,
-      condition: weatherCodeText(weatherCode),
+      weatherCode,
+      condition: weatherInfo.condition,
+      icon: weatherInfo.icon,
+      trendText: createHourlyTrendText(weatherInfo, rainChance),
       temperature,
       rainChance: rainChance ?? null,
       wind: Number.isFinite(Number(windSpeed)) ? `${windDirectionText}风 ${windSpeed} km/h` : `${windDirectionText}风`,
@@ -204,6 +233,7 @@ function normalizeAmapForecast(allWeather) {
       label: forecastLabel(index),
       time: cast.date || "",
       condition,
+      icon: weatherIcon(condition),
       temperature: `${nightTemp}-${dayTemp}`,
       rainChance: null,
       wind: `白天${cast.daywind || "暂无"}风 ${cast.daypower || "暂无"}级 / 夜间${cast.nightwind || "暂无"}风 ${cast.nightpower || "暂无"}级`

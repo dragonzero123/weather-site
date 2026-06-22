@@ -131,8 +131,9 @@ function renderPage(weather, publicConfig) {
     <div class="hourly-trend" aria-labelledby="hourlyTitle">
       <div class="section-heading">
         <h2 id="hourlyTitle">24小时天气趋势</h2>
-        <p>24小时趋势来源：Open-Meteo Forecast API</p>
+        <p>24小时趋势来源：Open-Meteo Forecast API，仅供趋势参考</p>
       </div>
+      <p class="section-note">24小时趋势仅供参考，当前天气以高德实况为准。</p>
       <div class="trend-list hourly-list" id="hourly24" tabindex="0"></div>
     </div>
 

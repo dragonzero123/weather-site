@@ -38,7 +38,20 @@ export async function checkSite() {
   assertValue(weather.forecast24[1]?.label === "明天", "第二个预报卡片必须标注明天");
   assertValue(Array.isArray(weather.hourly24), "weather.json 缺少 24 小时天气趋势 hourly24");
   assertValue(weather.hourlySource === "Open-Meteo Forecast API", "24 小时趋势来源必须标注 Open-Meteo Forecast API");
+  assertValue(weather.hourly24.length === 0 || weather.hourly24.every((item) => item.weatherCode !== undefined), "24 小时趋势必须保存 Open-Meteo 原始 weatherCode 方便排查");
+  assertValue(weather.hourly24.every((item) => item.condition !== "雷雨" || [95, 96, 99].includes(Number(item.weatherCode))), "只有 weatherCode 为 95、96、99 时才允许显示雷雨");
+  assertValue(weather.hourly24.length === 0 || weather.hourly24.every((item) => item.trendText), "24 小时趋势必须使用弱提示 trendText");
   assertValue(pageContent.includes("Open-Meteo Forecast API") && dataContent.includes("Open-Meteo Forecast API"), "页面和数据必须标注 24 小时趋势来源 Open-Meteo Forecast API");
+  assertValue(pageContent.includes("仅供趋势参考"), "页面必须说明 24 小时趋势仅供参考");
+  assertValue(pageContent.includes("当前天气以高德实况为准"), "页面必须说明当前天气以高德实况为准");
+  assertValue(fetchContent.includes('timezone", "Asia/Shanghai"'), "fetchWeather.js 请求 Open-Meteo 必须使用北京时间 Asia/Shanghai");
+  assertValue(appContent.includes('timezone", "Asia/Shanghai"'), "app.js 请求 Open-Meteo 必须使用北京时间 Asia/Shanghai");
+  assertValue(appContent.includes("weatherIcon") && appContent.includes("weatherCodeInfo"), "app.js 必须根据天气文字和 Open-Meteo weather_code 映射图标");
+  assertValue(fetchContent.includes("weatherIcon") && fetchContent.includes("weatherCodeInfo"), "fetchWeather.js 必须根据天气文字和 Open-Meteo weather_code 映射图标");
+  assertValue(appContent.includes("weatherCode") && fetchContent.includes("weatherCode"), "前端和数据生成必须保留 Open-Meteo 原始 weatherCode");
+  assertValue(appContent.includes("trendText") && fetchContent.includes("trendText"), "24 小时趋势必须使用 trendText 降低强结论");
+  assertValue(appContent.includes("createHourlyTrendText") && fetchContent.includes("createHourlyTrendText"), "必须通过 createHourlyTrendText 生成趋势参考文案");
+  assertValue(!appContent.includes('<div class="weather-icon" aria-hidden="true">☁</div>'), "天气卡片不能固定显示云图标");
   assertValue(!pageContent.includes("mock") && !dataContent.includes("mock"), "页面和数据不能显示 mock");
   assertValue(!pageContent.includes("未来24小时趋势") && !pageContent.includes("未来 24 小时"), "页面不能显示误导性的未来 24 小时趋势");
   assertValue(fetchContent.includes("AMAP_KEY"), "fetchWeather.js 必须通过 AMAP_KEY 读取高德 Key");
@@ -66,8 +79,10 @@ export async function checkSite() {
     "高德天气 API - 实况天气",
     "未来几天天气来源：高德天气 API",
     "24小时天气趋势",
-    "24小时趋势来源：Open-Meteo Forecast API",
+    "24小时趋势来源：Open-Meteo Forecast API，仅供趋势参考",
     "Open-Meteo Forecast API",
+    "仅供趋势参考",
+    "当前天气以高德实况为准",
     "刷新",
     "未来几天天气预报",
     "publicConfig",
@@ -95,6 +110,8 @@ export async function checkSite() {
     "fetchOpenMeteoHourly",
     "renderHourlyTrend",
     "hourly24",
+    "weatherCode",
+    "trendText",
     "Open-Meteo Forecast API",
     "今天",
     "明天",
